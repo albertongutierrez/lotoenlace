@@ -1,0 +1,21 @@
+{
+  "name": "lotoenlace-print-agent",
+  "version": "1.2.3",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=26.13.0"
+  },
+  "scripts": {
+    "start": "node src/cli.mjs start",
+    "configure": "node src/cli.mjs configure",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "node-thermal-printer": "4.6.1",
+    "qrcode": "1.5.4"
+  },
+  "devDependencies": {
+    "jsqr": "1.4.0"
+  }
+}

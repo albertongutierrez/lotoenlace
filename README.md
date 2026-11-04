@@ -12,9 +12,11 @@ Aplicación independiente basada en `plantilla-base`, migrada a Laravel 13 y ada
 
 Herd sirve el proyecto aunque su carpeta esté debajo de `xampp`; Apache no es necesario para este sitio. La base utiliza el servidor MySQL local existente.
 
-## Versiones verificadas al 20 de octubre de 2026
+## Versiones verificadas al 3 de noviembre de 2026
 
-Laravel 13.38.0, PHP de Herd 8.5.11, React 19.3.1, Inertia React 3.9.1 / Laravel 3.5.1, TypeScript 7.0.2, Tailwind 4.3.3, Vite 8.3.4 y PHPUnit 13.4.3. Los archivos lock fijan las versiones instaladas.
+PHP 8.5.12, Laravel 13.40.0, Inertia React 3.11.0 / Laravel 3.7.0, React 19.3.1, TypeScript 7.0.2, Tailwind 4.3.4, Vite 8.3.5, Vitest 5.1.0 y PHPUnit 13.4.6. Herramientas: Node.js 26.13.0 LTS, npm 12.2.1 y Composer 2.11.1. Los archivos lock fijan las dependencias.
+
+En PowerShell, desde la raíz del proyecto, ejecuta `& .\scripts\use-toolchain.ps1` para activar PHP de Herd y las herramientas del proyecto en esa terminal. Si faltan Node.js o Composer, el script descarga los binarios oficiales, verifica su SHA256 y los instala bajo `.tooling/`. No cambia el PATH de Windows. Si no usas Herd, puedes indicar el ejecutable con `-PhpExecutable`.
 
 ## Puesta en operación
 
@@ -29,17 +31,18 @@ Laravel 13.38.0, PHP de Herd 8.5.11, React 19.3.1, Inertia React 3.9.1 / Laravel
 
 Las instalaciones nuevas empiezan vacías. En este entorno local se cargaron 12 loterías, 37 sorteos de El Boleto Ganador y un consorcio con la banca PRUEBA-001. Consulta [la guía de demostración](docs/DEMO.md) para horarios, tarifas de ejemplo y casos de bloqueos y límites. La carga es opcional e idempotente: `php artisan db:seed --class=LotteryDemoSeeder`. Impresión, reimpresión y generación visual de QR quedan para el módulo posterior; sus ajustes ya se pueden guardar.
 
-## Comandos con Herd
-
-Si `herd` no aparece en una terminal abierta antes de instalarlo, abrir otra terminal o usar su ruta completa:
+## Comandos de desarrollo
 
 ```powershell
-$herd = "$env:USERPROFILE\.config\herd\bin\herd.bat"
-& $herd php artisan migrate --seed
-& $herd php vendor/phpunit/phpunit/phpunit
+& .\scripts\use-toolchain.ps1
+composer install
+npm ci
+npm ci --prefix printing-agent
 npm run build
-& $herd php artisan lottery:import-results
+php artisan test
 ```
+
+En un clon nuevo, copia `.env.example` a `.env`, configura la base de datos y ejecuta `php artisan key:generate` y `php artisan migrate --seed` después de `composer install`. Para el primer administrador, usa `php artisan base:create-admin`. La compilación genera `public/build/`; los archivos locales de acceso y las claves de impresión se preparan por separado.
 
 No ejecutar migraciones destructivas sobre la base de trabajo. PHPUnit usa SQLite en memoria y no modifica MySQL local.
 
@@ -82,7 +85,7 @@ Ver `docs/LOTTERY_RULES.md`. Las pruebas cubren permisos de la plantilla y regla
 
 ## Estado del servidor con TanStack Query
 
-TanStack Query 5.104.5 administra las consultas de disponibilidad y tickets, la carga para duplicar tickets, el catálogo de loterías y sorteos y sus mutaciones. Inertia conserva la navegación; Axios sigue siendo el transporte HTTP.
+TanStack Query 5.105.3 administra las consultas de disponibilidad y tickets, la carga para duplicar tickets, el catálogo de loterías y sorteos y sus mutaciones. Inertia conserva la navegación; Axios sigue siendo el transporte HTTP.
 
 Las claves incluyen usuario/banca y parámetros de consulta. La caché es solo en memoria y se limpia al cambiar de usuario o banca. Las consultas de cupo son manuales, sin reutilizar respuestas frescas: cada pulsación consulta al servidor y cualquier cambio de jugada o selección retira el cupo anterior. El servidor siempre revalida al vender.
 

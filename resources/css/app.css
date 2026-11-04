@@ -1,0 +1,9 @@
+@import "tailwindcss";
+@config "../../tailwind.config.js";
+
+@layer base {
+    * { letter-spacing: 0; scrollbar-width: thin; }
+    html { color-scheme: light; }
+    html.dark { color-scheme: dark; }
+    body { min-width: 320px; }
+}
