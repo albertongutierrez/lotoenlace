@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\{BetLimit, BranchOffice, Draw, Lottery, Office, Ticket, User};
 use App\Services\Lottery\{Configuration, LimitEngine, SaleService};
 use Carbon\CarbonImmutable;
+use Database\Seeders\LotteryCatalogSeeder;
 use Database\Seeders\LotteryDemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -14,6 +15,31 @@ use Tests\TestCase;
 class LotteryDemoTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_production_seed_loads_only_the_catalog_and_preserves_existing_draws(): void
+    {
+        $this->app->detectEnvironment(fn () => 'production');
+        $this->artisan('db:seed', ['--force' => true])->assertSuccessful();
+
+        $quemaito = Draw::firstWhere('source_key', 'resultados-el-quemaito-mayor');
+        $this->assertSame('LoteDom', $quemaito->lottery->name);
+        $this->assertSame(1, $quemaito->result_count);
+        $this->assertSame(['quiniela', 'super_pale'], $quemaito->modalities);
+
+        $leidsa = Draw::firstWhere('source_key', 'resultados-quiniela-leidsa');
+        $leidsa->update(['source_key' => null, 'source_url' => null, 'closes_at' => '20:00:00', 'active' => false]);
+        $quemaito->update(['name' => 'Quemaito Mayor', 'closes_at' => '11:45:00']);
+        $this->artisan('db:seed', ['--class' => LotteryCatalogSeeder::class, '--force' => true])->assertSuccessful();
+
+        $this->assertDatabaseCount('lotteries', 12);
+        $this->assertDatabaseCount('draws', 38);
+        $this->assertDatabaseCount('offices', 0);
+        $this->assertDatabaseCount('branch_offices', 0);
+        $this->assertDatabaseCount('bet_limits', 0);
+        $this->assertDatabaseCount('tickets', 0);
+        $this->assertDatabaseHas('draws', ['id' => $leidsa->id, 'closes_at' => '20:00:00', 'active' => false]);
+        $this->assertDatabaseHas('draws', ['id' => $quemaito->id, 'name' => 'Quemaito Mayor', 'closes_at' => '11:45:00']);
+    }
 
     public function test_catalog_and_demo_are_repeatable_without_overwriting_configuration(): void
     {

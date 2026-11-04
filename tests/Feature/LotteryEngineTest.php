@@ -43,6 +43,9 @@ class LotteryEngineTest extends TestCase
         config(['printing.test_reprint_office_ids' => []]);
         $this->travelTo(CarbonImmutable::parse('2026-10-20 10:00:00', 'America/Santo_Domingo'));
         $this->seed();
+        // These tests use their own catalog and result source fixtures.
+        Draw::query()->delete();
+        Lottery::query()->delete();
         $this->office = Office::create(['name' => 'Consorcio A', 'currency' => 'DOP', 'is_active' => true]);
         $this->branch = BranchOffice::create(['office_id' => $this->office->id, 'name' => 'Banca A', 'code' => '001', 'is_active' => true]);
         $this->seller = User::factory()->create(['active_branch_office_id' => $this->branch->id]);

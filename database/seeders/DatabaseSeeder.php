@@ -25,5 +25,6 @@ class DatabaseSeeder extends Seeder
             $role->permissions()->syncWithoutDetaching($permissions->pluck('id')->all());
         }
         \App\Models\Office::withTrashed()->each(fn ($office) => app(\App\Services\ConsortiumRoles::class)->initialize($office));
+        $this->call(LotteryCatalogSeeder::class);
     }
 }

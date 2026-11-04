@@ -2,8 +2,7 @@
 
 namespace Database\Seeders;
 
-use App\Models\{BetLimit, BranchOffice, Draw, Lottery, Office, User};
-use Carbon\CarbonImmutable;
+use App\Models\{BetLimit, BranchOffice, Office, User};
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
@@ -16,34 +15,7 @@ class LotteryDemoSeeder extends Seeder
             throw new \RuntimeException('Los datos de demostración solo se cargan en local o testing.');
         }
         DB::transaction(function () {
-            $catalog = json_decode(file_get_contents(database_path('data/boletoganador.json')), true, flags: JSON_THROW_ON_ERROR);
-            $draws = [];
-            foreach ($catalog['draws'] as $item) {
-                $group = match (true) {
-                    str_starts_with($item['name'], 'Anguila') => 'Anguila',
-                    str_starts_with($item['name'], 'Haiti') => 'Haití Bolet',
-                    str_starts_with($item['name'], 'King') => 'King Lottery',
-                    str_starts_with($item['name'], 'La Primera') => 'La Primera',
-                    str_starts_with($item['name'], 'La Suerte') => 'La Suerte',
-                    str_starts_with($item['name'], 'New York') => 'New York',
-                    str_starts_with($item['name'], 'Florida') => 'Florida',
-                    in_array($item['name'], ['Gana Mas', 'Loteria Nacional']) => 'Lotería Nacional',
-                    in_array($item['name'], ['Quiniela Leidsa', 'Pega 3 Mas']) => 'LEIDSA',
-                    $item['name'] === 'Quiniela Real' => 'Loto Real',
-                    $item['name'] === 'Quiniela Loteka' => 'Loteka',
-                    $item['name'] === 'Quiniela LoteDom' => 'LoteDom',
-                    default => throw new \RuntimeException('Lotería sin clasificar: '.$item['name']),
-                };
-                $lottery = Lottery::firstOrCreate(['name' => $group], ['active' => true]);
-                $draws[] = Draw::firstOrCreate(['source_key' => basename($item['url'])], [
-                    'lottery_id' => $lottery->id, 'name' => $item['name'],
-                    'opens_at' => '06:00:00',
-                    'closes_at' => CarbonImmutable::parse($item['draws_at'])->subMinutes(5)->format('H:i:s'),
-                    'draws_at' => $item['draws_at'], 'weekdays' => [0, 1, 2, 3, 4, 5, 6],
-                    'modalities' => ['quiniela', 'pale', 'tripleta', 'super_pale'],
-                    'result_count' => 3, 'source_url' => $item['url'], 'active' => true,
-                ]);
-            }
+            $draws = app(LotteryCatalogSeeder::class)->seedBaseDraws();
             $office = Office::firstOrCreate(['name' => 'Consorcio de prueba LotoEnlace'], [
                 'currency' => 'DOP', 'is_active' => true, 'slogan' => 'DEMO — tarifas y límites de prueba',
             ]);
@@ -70,15 +42,15 @@ class LotteryDemoSeeder extends Seeder
                     'cancel_minutes' => 5, 'reprint_minutes' => 15, 'show_qr' => false,
                     'discount_enabled' => true, 'discount_every_minor' => 1000, 'discount_amount_minor' => 100,
                     'footer' => 'DEMO LotoEnlace — sin valor comercial',
-                    'draw_ids' => array_map(fn ($d) => $d->id, $draws), 'rules' => $rules, 'pairs' => $pairs,
+                    'draw_ids' => array_values(array_map(fn ($d) => $d->id, $draws)), 'rules' => $rules, 'pairs' => $pairs,
                 ]]);
             }
             $bank = BranchOffice::firstOrCreate(['office_id' => $office->id, 'code' => 'PRUEBA-001'], [
                 'name' => 'Banca de prueba', 'is_main' => true, 'is_active' => true, 'lottery_settings' => [],
             ]);
             if ($bank->wasRecentlyCreated) {
-                $national = collect($draws)->firstWhere('source_key', 'resultados-loteria-nacional-noche');
-                $leidsa = collect($draws)->firstWhere('source_key', 'resultados-quiniela-leidsa');
+                $national = $draws['resultados-loteria-nacional-noche'];
+                $leidsa = $draws['resultados-quiniela-leidsa'];
                 $pairIds = [$national->id, $leidsa->id];
                 sort($pairIds);
                 $examples = [

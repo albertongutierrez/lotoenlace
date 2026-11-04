@@ -22,14 +22,22 @@ En PowerShell, desde la raíz del proyecto, ejecuta `& .\scripts\use-toolchain.p
 
 1. Entrar con el administrador local y cambiar su contraseña desde Perfil.
 2. Crear un consorcio y elegir su moneda. Su vista permite configurar valores antes de crear bancas.
-3. Crear las loterías y sus sorteos: horarios RD, días, modalidades y suspensiones por fecha.
+3. Revisar el catálogo inicial de loterías y sorteos, con sus horarios RD, días, modalidades y suspensiones por fecha.
 4. Habilitar los sorteos en el consorcio y configurar sus premios. Las comisiones son opcionales.
 5. Configurar las parejas de súper palé: habilitación, sorteo base, orden de números y categorías de premio.
 6. Crear bancas y usuarios; asignar roles y accesos dentro del consorcio.
 7. Seleccionar la banca activa, personalizar únicamente sus excepciones y crear restricciones si corresponde.
 8. Vender. Sin tabla de premios o fuera de horario, el servidor rechaza la jugada.
 
-Las instalaciones nuevas empiezan vacías. En este entorno local se cargaron 12 loterías, 37 sorteos de El Boleto Ganador y un consorcio con la banca PRUEBA-001. Consulta [la guía de demostración](docs/DEMO.md) para horarios, tarifas de ejemplo y casos de bloqueos y límites. La carga es opcional e idempotente: `php artisan db:seed --class=LotteryDemoSeeder`. Impresión, reimpresión y generación visual de QR quedan para el módulo posterior; sus ajustes ya se pueden guardar.
+La instalación inicial con `php artisan migrate --seed` carga 12 loterías y 38 sorteos enlazados con El Boleto Ganador. Incluye El Quemaito Mayor bajo LoteDom, con una sola posición ganadora. Los horarios iniciales provienen del catálogo del proyecto y se pueden ajustar desde la administración.
+
+En cPanel, después de actualizar el repositorio de una instalación existente, el catálogo se puede cargar con el ejecutable PHP 8.5 del hosting. La carga agrega los registros faltantes y conserva los horarios y demás ajustes de los sorteos existentes.
+
+```bash
+/opt/cpanel/ea-php85/root/usr/bin/php artisan db:seed --class=LotteryCatalogSeeder --force
+```
+
+La carga del consorcio y la banca `PRUEBA-001` es independiente y está disponible en local con `php artisan db:seed --class=LotteryDemoSeeder`. Consulta [la guía de demostración](docs/DEMO.md) para las tarifas de ejemplo y los casos de bloqueos y límites.
 
 ## Comandos de desarrollo
 
