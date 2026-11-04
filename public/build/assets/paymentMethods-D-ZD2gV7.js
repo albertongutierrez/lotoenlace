@@ -1,0 +1,1 @@
+var e={cash:`Efectivo`,transfer:`Transferencia`,card:`Tarjeta`,deposit:`Depósito`};function t(t=`cash`,n={}){return n[t]??e[t]??t}function n(e){return e.payment_method_label??t(e.payment_method??`cash`,e.settings_snapshot?.payment_method_labels)}export{e as n,n as r,t};

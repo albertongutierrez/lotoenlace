@@ -5,7 +5,6 @@
 /.env.*
 !/.env.example
 /public/hot
-/public/build/
 /public/storage
 /storage/*
 !/storage/app/
