@@ -12,6 +12,8 @@
 
     <title inertia>{{ config('app.name') }}</title>
 
+    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
+
     @routes
 
     @viteReactRefresh
