@@ -78,6 +78,10 @@ En otro servidor configurar el programador de Laravel con PHP 8.5 y `artisan sch
 
 ## Reglas y validación
 
+En Consorcios > Comisiones y premios se configuran valores generales independientes para quiniela, palé y tripleta, además de excepciones por sorteo. Cada modalidad admite su porcentaje de comisión y sus categorías de premio. Súper palé conserva su configuración general y las excepciones por pareja. Las bancas heredan del consorcio y pueden definir valores generales y excepciones propios. El orden de prioridad es general del consorcio, excepción del consorcio, general de la banca y excepción de la banca. Las tablas guardadas previamente por sorteo se conservan como excepciones. «Usar general en todos los sorteos» permite retirar las excepciones de una modalidad en el ámbito seleccionado antes de guardar.
+
+Estos ajustes requieren el permiso `lottery.settings` y quedan registrados en la auditoría de configuración. Los tickets conservan la tabla y comisión vigentes al venderse, aunque después cambie la configuración. La nueva configuración utiliza los campos JSON existentes.
+
 ### Formas de cuadre por consorcio y banca
 
 En Consorcios > Configuración > Forma de cuadre se define el valor del consorcio. Al elegir una banca en «Configurar», esta puede heredar el valor o mantener una excepción propia.

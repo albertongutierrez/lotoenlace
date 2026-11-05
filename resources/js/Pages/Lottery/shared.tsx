@@ -22,6 +22,7 @@ export type Draw = {
     active: boolean;
     source_url?: string;
     source_key?: string;
+    result_count?: number;
     exceptions?: Record<
         string,
         { closed: boolean; opens_at?: string; closes_at?: string }

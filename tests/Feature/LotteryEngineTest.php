@@ -1004,6 +1004,91 @@ class LotteryEngineTest extends TestCase
         $this->postJson('/lottery/settings', ['scope' => 'office', 'currency' => 'DOP', 'settings' => ['super_pale' => ['commission_bps' => 10001]]])->assertUnprocessable();
     }
 
+    public function test_general_tariffs_respect_draw_exceptions_and_independent_bank_values(): void
+    {
+        $settings = $this->office->lottery_settings;
+        $settings['general_rules'] = ['quiniela' => ['payouts' => ['1' => 60, '2' => 10, '3' => 5], 'commission_bps' => 1000]];
+        $settings['rules'] = [$this->b->id.':quiniela' => ['payouts' => ['1' => 50], 'commission_bps' => 500]];
+        $this->office->update(['lottery_settings' => $settings]);
+        $other = BranchOffice::create(['office_id' => $this->office->id, 'name' => 'Otra', 'code' => '002', 'is_active' => true]);
+        $this->branch->update(['lottery_settings' => [
+            'general_rules' => ['quiniela' => ['payouts' => ['1' => 70], 'commission_bps' => 0]],
+            'rules' => [$this->a->id.':quiniela' => ['payouts' => ['1' => 80], 'commission_bps' => null]],
+        ]]);
+
+        $config = app(Configuration::class);
+        $bankRules = $config->effective($this->branch->fresh())['rules'];
+        $this->assertSame(['1' => 80], $bankRules[$this->a->id.':quiniela']['payouts']);
+        $this->assertSame(0, $bankRules[$this->a->id.':quiniela']['commission_bps']);
+        $this->assertSame(['1' => 70], $bankRules[$this->b->id.':quiniela']['payouts']);
+        $otherRules = $config->effective($other->fresh())['rules'];
+        $this->assertSame(['1' => 60, '2' => 10, '3' => 5], $otherRules[$this->a->id.':quiniela']['payouts']);
+        $this->assertSame(['1' => 50], $otherRules[$this->b->id.':quiniela']['payouts']);
+        $this->branch->update(['lottery_settings' => []]);
+        $this->assertSame($otherRules, $config->effective($this->branch->fresh())['rules']);
+    }
+
+    public function test_sales_and_winning_prizes_use_the_general_tariff_snapshot_for_each_modality(): void
+    {
+        $settings = $this->office->lottery_settings;
+        $settings['rules'] = [];
+        $settings['general_rules'] = [
+            'quiniela' => ['payouts' => ['1' => 60, '2' => 10, '3' => 5], 'commission_bps' => 1000],
+            'pale' => ['payouts' => ['1-2' => 1000, '1-3' => 1000, '2-3' => 100], 'commission_bps' => 500],
+            'tripleta' => ['payouts' => ['3' => 2000, '2' => 100], 'commission_bps' => 0],
+        ];
+        $this->office->update(['lottery_settings' => $settings]);
+        $lines = [
+            $this->line(),
+            [...$this->line(), 'modality' => 'pale', 'numbers' => '10-20'],
+            [...$this->line(), 'modality' => 'tripleta', 'numbers' => '10-20-30'],
+        ];
+        $ticket = $this->sell($lines);
+        $this->assertSame(150, $ticket->commission_minor);
+        $this->assertSame([100, 50, 0], $ticket->lines->pluck('commission_minor')->all());
+
+        foreach ($settings['general_rules'] as &$rule) $rule = ['payouts' => array_fill_keys(array_keys($rule['payouts']), 1), 'commission_bps' => 0];
+        unset($rule);
+        $this->office->update(['lottery_settings' => $settings]);
+        $newTicket = $this->sell($lines);
+        $this->assertSame(0, $newTicket->commission_minor);
+        $this->travelTo(CarbonImmutable::parse('2026-10-20 12:06:00', 'America/Santo_Domingo'));
+        app(ResultService::class)->record(['draw_id' => $this->a->id, 'business_date' => '2026-10-20', 'numbers' => ['10', '20', '30'], 'confirmed' => true], $this->seller);
+        $this->assertSame([60000, 1000000, 2000000], $ticket->lines()->orderBy('id')->pluck('prize_minor')->all());
+        $this->assertSame([1000, 1000, 1000], $newTicket->lines()->orderBy('id')->pluck('prize_minor')->all());
+    }
+
+    public function test_general_tariffs_validate_categories_commissions_and_scope(): void
+    {
+        $tariffs = [
+            'quiniela' => ['payouts' => ['1' => 75, '2' => 10, '3' => 5], 'commission_bps' => 1250],
+            'pale' => ['payouts' => ['1-2' => 1200], 'commission_bps' => 500],
+            'tripleta' => ['payouts' => ['3' => 2500, '2' => 150], 'commission_bps' => 0],
+        ];
+        $data = ['scope' => 'office', 'currency' => 'DOP', 'settings' => ['general_rules' => $tariffs]];
+        $this->actingAs($this->seller)->postJson('/lottery/settings', $data)->assertRedirect();
+        $this->assertSame($tariffs, $this->office->fresh()->lottery_settings['general_rules']);
+        foreach ([
+            ['quiniela' => ['payouts' => ['1-2' => 60]]],
+            ['pale' => ['payouts' => ['1' => 60]]],
+            ['tripleta' => ['payouts' => ['1' => 60]]],
+            ['quiniela' => ['commission_bps' => 10001]],
+            ['quiniela' => ['payouts' => ['1' => -1]]],
+            ['quiniela' => ['payouts' => ['1' => 1000001]]],
+            ['super_pale' => ['payouts' => ['1-1' => 1000]]],
+        ] as $invalid) {
+            $this->postJson('/lottery/settings', [...$data, 'settings' => ['general_rules' => $invalid]])->assertUnprocessable();
+        }
+        $branchData = [...$data, 'scope' => 'branch', 'branch_id' => $this->branch->id];
+        $this->postJson('/lottery/settings', $branchData)->assertRedirect();
+        $this->assertSame($tariffs, $this->branch->fresh()->lottery_settings['general_rules']);
+        $foreign = Office::create(['name' => 'Ajeno', 'currency' => 'DOP', 'is_active' => true]);
+        $this->postJson('/lottery/settings', [...$data, 'office_id' => $foreign->id])->assertForbidden();
+        $this->seller->roles()->detach();
+        $this->seller->unsetRelation('roles');
+        $this->postJson('/lottery/settings', $data)->assertForbidden();
+    }
+
     public function test_limits_crud_is_scoped_and_audited(): void
     {
         $this->actingAs($this->seller);

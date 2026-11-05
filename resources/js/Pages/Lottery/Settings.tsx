@@ -1,5 +1,6 @@
 import ComboboxSelect from "@/Components/ComboboxSelect";
 import PaymentMethodsEditor from "./PaymentMethodsEditor";
+import TariffRulesEditor from "./TariffRulesEditor";
 import ConsortiumManagement from "./ConsortiumManagement";
 import { ArrowLeft, Building2, Settings2, Ticket, Trophy, GitMerge, Store, Users, RotateCcw, Plus, Pencil, Save } from "lucide-react";
 import OfficeForm from "@/Pages/Settings/Offices/OfficeForm";
@@ -15,7 +16,6 @@ import {
     button,
     secondary,
     panel,
-    modes,
     drawName,
 } from "./shared";
 
@@ -41,7 +41,6 @@ export default function Settings({
     );
     const [currency, setCurrency] = useState(office.currency);
     const [busy, setBusy] = useState(false);
-    const [ruleKey, setRuleKey] = useState("");
     const [pairScope, setPairScope] = useState("general");
     const [pairA, setPairA] = useState("");
     const [pairB, setPairB] = useState("");
@@ -66,24 +65,14 @@ export default function Settings({
     const pairKey = [Number(pairA), Number(pairB)]
         .sort((a, b) => a - b)
         .join("-");
-    const section = tab === "pairs" ? "pairs" : "rules";
-    const key = tab === "pairs" ? pairKey : ruleKey;
     const generalPair = tab === "pairs" && pairScope === "general";
-    const parentRule = generalPair ? (parent.super_pale ?? {}) : tab === "pairs"
-        ? { ...parent.super_pale, ...parent.pairs?.[key], ...settings.super_pale }
-        : (parent[section]?.[key] ?? {});
-    const ownRule = generalPair ? (settings.super_pale ?? {}) : (settings[section]?.[key] ?? {});
+    const parentRule = generalPair ? (parent.super_pale ?? {})
+        : { ...parent.super_pale, ...parent.pairs?.[pairKey], ...settings.super_pale };
+    const ownRule = generalPair ? (settings.super_pale ?? {}) : (settings.pairs?.[pairKey] ?? {});
     const rule = { ...parentRule, ...ownRule };
     const setRule = (r: any) =>
-        generalPair ? update("super_pale", r) : update(section, { ...settings[section], [key]: r });
-    const category =
-        tab === "pairs"
-            ? ["1-1", "1-2", "1-3"]
-            : ruleKey.endsWith(":quiniela")
-              ? ["1", "2", "3"]
-              : ruleKey.endsWith(":pale")
-                ? ["1-2", "1-3", "2-3"]
-                : ["3", "2"];
+        generalPair ? update("super_pale", r) : update("pairs", { ...settings.pairs, [pairKey]: r });
+    const category = ["1-1", "1-2", "1-3"];
     return (
         <Shell fullWidth title={office.name}>
             {auth.user.is_super_admin && <div className="flex"><Link className={`${secondary} inline-flex items-center gap-2`} href="/settings/offices"><ArrowLeft size={16} aria-hidden />Volver a consorcios</Link></div>}
@@ -363,44 +352,7 @@ export default function Settings({
                     </>
                 )}
                 {tab === "rules" && (
-                    <div className="space-y-5">
-                        <Field label="Sorteo">
-                            <ComboboxSelect className={input} value={ruleKey} onChange={e => setRuleKey(e.target.value)}>
-                                <option value="">Seleccionar sorteo</option>
-                                {allowed.map((d: Draw) => <option key={d.id} value={String(d.id)}>{drawName(d)}</option>)}
-                            </ComboboxSelect>
-                        </Field>
-                        {allowed.filter((d: Draw) => String(d.id) === ruleKey).map((d: Draw) => (
-                            <div key={d.id} className="space-y-4">
-                                <p className="text-sm text-slate-500">Configura todas las modalidades de este sorteo. Premios por cada unidad apostada; comisión sobre el monto cobrado.</p>
-                                <div className="grid items-start gap-4 xl:grid-cols-3">
-                                    {d.modalities.filter(m => m !== "super_pale").map(m => {
-                                        const ruleId = `${d.id}:${m}`;
-                                        const inherited = parent.rules?.[ruleId] ?? {};
-                                        const own = settings.rules?.[ruleId] ?? {};
-                                        const effectiveRule = { ...inherited, ...own };
-                                        const categories = m === "quiniela" ? ["1", "2", "3"] : m === "pale" ? ["1-2", "1-3", "2-3"] : ["3", "2"];
-                                        const change = (next: any) => setSettings((current: any) => ({ ...current, rules: { ...current.rules, [ruleId]: next } }));
-                                        return <section key={m} className={`${panel} space-y-4`}>
-                                            <h2 className="flex items-center gap-2 font-semibold"><Ticket size={16} aria-hidden />{modes[m as keyof typeof modes]}</h2>
-                                            <Field label="Comisión sobre cobrado (%)">
-                                                <input className={input} type="number" min="0" max="100" step="0.01" value={own.commission_bps == null ? "" : own.commission_bps / 100} placeholder={String((inherited.commission_bps ?? 0) / 100)} onChange={e => change({ ...own, commission_bps: e.target.value === "" ? null : Math.round(Number(e.target.value) * 100) })} />
-                                            </Field>
-                                            {categories.map(c => <Field key={c} label={`Premio ${c}`}>
-                                                <input className={input} type="number" min="0" max="1000000" step="1" value={effectiveRule.payouts?.[c] ?? ""} onChange={e => {
-                                                    const payouts = { ...effectiveRule.payouts };
-                                                    if (e.target.value === "") delete payouts[c]; else payouts[c] = Number(e.target.value);
-                                                    change({ ...own, payouts });
-                                                }} />
-                                            </Field>)}
-                                            {scope === "branch" && <button className={`${secondary} inline-flex items-center gap-2`} onClick={() => setSettings((current: any) => { const rules = { ...current.rules }; delete rules[ruleId]; return { ...current, rules }; })}><RotateCcw size={16} aria-hidden />Heredar del consorcio</button>}
-                                        </section>;
-                                    })}
-                                </div>
-                                {d.modalities.includes("super_pale") && <p className="text-sm text-slate-500">El súper palé se configura en su pestaña, porque combina dos sorteos.</p>}
-                            </div>
-                        ))}
-                    </div>
+                    <TariffRulesEditor key={`${scope}:${selectedBranchId}`} settings={settings} parent={parent} draws={allowed} branch={scope === "branch"} onChange={setSettings} />
                 )}
                 {tab === "pairs" && (
                     <div className="space-y-5">
@@ -589,11 +541,9 @@ export default function Settings({
                                         className={`${secondary} inline-flex items-center gap-2`}
                                         onClick={() => {
                                             if (generalPair) { inherit("super_pale"); return; }
-                                            const copy = {
-                                                ...settings[section],
-                                            };
-                                            delete copy[key];
-                                            update(section, copy);
+                                            const copy = { ...settings.pairs };
+                                            delete copy[pairKey];
+                                            update("pairs", copy);
                                         }}
                                     >
                                         <RotateCcw size={16} aria-hidden className="inline-block mr-1" />Heredar esta tabla del consorcio

@@ -12,7 +12,7 @@ class Configuration
     public const PAYMENT_METHODS = ['cash'=>'Efectivo', 'transfer'=>'Transferencia', 'card'=>'Tarjeta', 'deposit'=>'Depósito'];
     public const DEFAULTS = ['payment_methods' => ['cash'], 'payment_method_labels' => [], 'payment_reference_required' => [], 'reconciliation_mode' => 'cash', 'daily_limit_minor' => null, 'consortium_limit_minor' => null, 'cancel_minutes' => 5,
         'reprint_minutes' => 15, 'show_qr' => false, 'discount_enabled' => false, 'discount_every_minor' => 1000,
-        'discount_amount_minor' => 100, 'footer' => '', 'draw_ids' => [], 'rules' => [], 'pairs' => [], 'super_pale' => []];
+        'discount_amount_minor' => 100, 'footer' => '', 'draw_ids' => [], 'general_rules' => [], 'rules' => [], 'pairs' => [], 'super_pale' => []];
 
     public function effective(BranchOffice $branch): array
     {
@@ -30,9 +30,26 @@ class Configuration
         foreach ($overrides['rules'] ?? [] as $key => $rule) {
             $result['rules'][$key] = array_replace($parent['rules'][$key] ?? [], array_filter($rule, fn ($v) => $v !== null));
         }
+        $draws = Draw::whereIn('id', $result['draw_ids'])->get();
+        $result['general_rules'] = [];
+        foreach (['quiniela', 'pale', 'tripleta'] as $mode) {
+            $general = array_filter($parent['general_rules'][$mode] ?? [], fn ($v) => $v !== null);
+            $branchGeneral = array_filter($overrides['general_rules'][$mode] ?? [], fn ($v) => $v !== null);
+            $result['general_rules'][$mode] = array_replace($general, $branchGeneral);
+            foreach ($draws as $draw) {
+                if (! in_array($mode, $draw->modalities, true)) {
+                    continue;
+                }
+                $key = $draw->id.':'.$mode;
+                $result['rules'][$key] = array_replace($general,
+                    array_filter($parent['rules'][$key] ?? [], fn ($v) => $v !== null),
+                    $branchGeneral,
+                    array_filter($overrides['rules'][$key] ?? [], fn ($v) => $v !== null));
+            }
+        }
         $result['super_pale'] = array_replace($parent['super_pale'], array_filter($overrides['super_pale'] ?? [], fn ($v) => $v !== null));
         $result['pairs'] = [];
-        $ids = Draw::whereIn('id', $result['draw_ids'])->get()->filter(fn ($draw) => in_array('super_pale', $draw->modalities, true))->pluck('id')->sort()->values()->all();
+        $ids = $draws->filter(fn ($draw) => in_array('super_pale', $draw->modalities, true))->pluck('id')->sort()->values()->all();
         for ($i = 0; $i < count($ids); $i++) {
             for ($j = $i + 1; $j < count($ids); $j++) {
                 $key = $ids[$i].'-'.$ids[$j];

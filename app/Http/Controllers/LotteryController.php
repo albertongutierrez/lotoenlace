@@ -228,7 +228,7 @@ class LotteryController extends Controller
 
         $data = $r->validate(['scope' => ['required', Rule::in(['office', 'branch'])], 'currency' => ['required', Rule::in(['DOP', 'USD', 'EUR', 'HTG'])],
 
-            'settings' => 'present|array:payment_methods,payment_method_labels,payment_reference_required,reconciliation_mode,daily_limit_minor,consortium_limit_minor,cancel_minutes,reprint_minutes,show_qr,discount_enabled,discount_every_minor,discount_amount_minor,footer,draw_ids,rules,pairs,super_pale',
+            'settings' => 'present|array:payment_methods,payment_method_labels,payment_reference_required,reconciliation_mode,daily_limit_minor,consortium_limit_minor,cancel_minutes,reprint_minutes,show_qr,discount_enabled,discount_every_minor,discount_amount_minor,footer,draw_ids,general_rules,rules,pairs,super_pale',
 
             'settings.payment_methods' => 'nullable|array|list|min:1|max:100',
             'settings.payment_methods.*' => ['required', 'string', 'regex:/^(cash|transfer|card|deposit|custom_[a-f0-9]{12})$/D', 'distinct'],
@@ -248,6 +248,13 @@ class LotteryController extends Controller
 
             'settings.footer' => 'nullable|string|max:500', 'settings.draw_ids' => 'nullable|array', 'settings.draw_ids.*' => 'integer|exists:draws,id',
 
+            'settings.general_rules' => 'nullable|array:quiniela,pale,tripleta',
+            'settings.general_rules.*' => 'nullable|array:commission_bps,payouts',
+            'settings.general_rules.*.commission_bps' => 'nullable|integer|between:0,10000',
+            'settings.general_rules.quiniela.payouts' => 'nullable|array:1,2,3',
+            'settings.general_rules.pale.payouts' => 'nullable|array:1-2,1-3,2-3',
+            'settings.general_rules.tripleta.payouts' => 'nullable|array:3,2',
+            'settings.general_rules.*.payouts.*' => 'integer|between:0,1000000',
             'settings.rules' => 'nullable|array', 'settings.rules.*' => 'array', 'settings.pairs' => 'nullable|array', 'settings.pairs.*' => 'array']);
 
         $r->validate([
