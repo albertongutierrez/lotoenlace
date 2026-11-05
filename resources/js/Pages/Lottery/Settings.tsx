@@ -2,6 +2,7 @@ import ComboboxSelect from "@/Components/ComboboxSelect";
 import PaymentMethodsEditor from "./PaymentMethodsEditor";
 import TariffRulesEditor from "./TariffRulesEditor";
 import { clearTariffOverride } from "@/lib/tariffSettings";
+import { hasBranchOverrides } from "@/lib/branchSettings";
 import ConsortiumManagement from "./ConsortiumManagement";
 import { ArrowLeft, Building2, Settings2, Ticket, Trophy, GitMerge, Store, Users, RotateCcw, Plus, Pencil, Save } from "lucide-react";
 import OfficeForm from "@/Pages/Settings/Offices/OfficeForm";
@@ -126,7 +127,9 @@ export default function Settings({
                             <option value="office">
                                 Consorcio · valores heredados por las bancas
                             </option>
-                            {branches.map((b: any) => <option key={b.id} value={String(b.id)}>Banca {b.code} · {b.name || "Sin nombre"} · excepciones propias</option>)}
+                            {branches.map((b: any) => <option key={b.id} value={String(b.id)}>
+                                Banca {b.code} · {b.name || "Sin nombre"} · {hasBranchOverrides(scope === "branch" && b.id === selectedBranchId ? settings : b.lottery_settings) ? "excepciones propias" : "hereda del consorcio"}
+                            </option>)}
                         </ComboboxSelect>
                     </Field>
                     <span className="text-sm text-slate-500">

@@ -9,6 +9,7 @@ import BranchOfficeForm from "@/Pages/Settings/BranchOffices/BranchOfficeForm";
 import UserForm from "@/Pages/Settings/Users/UserForm";
 import RoleForm from "@/Pages/Settings/Roles/RoleForm";
 import { PageProps } from "@/types";
+import { hasBranchOverrides } from "@/lib/branchSettings";
 import { button, input, panel, secondary } from "./shared";
 
 export default function ConsortiumManagement({ tab, office, branches, management, configure }: any) {
@@ -40,7 +41,7 @@ export default function ConsortiumManagement({ tab, office, branches, management
             { id: "kind", header: "Tipo", cell: ({ row }: any) => row.original.is_system ? "Sistema · compartido" : "Del consorcio" },
         ] : [
             { id: "contact", header: "Contacto", cell: ({ row }: any) => [row.original.phone, row.original.mobile_phone].filter(Boolean).join(" / ") || "—" },
-            { id: "config", header: "Configuración", cell: ({ row }: any) => Object.keys(row.original.lottery_settings ?? {}).length ? "Con excepciones propias" : "Hereda del consorcio" },
+            { id: "config", header: "Configuración", cell: ({ row }: any) => hasBranchOverrides(row.original.lottery_settings) ? "Con excepciones propias" : "Hereda del consorcio" },
         ]),
         ...(tab !== "users" ? [{ id: "status", header: "Estado", cell: ({ row }: any) => row.original.is_active ? "Activo" : "Inactivo" }] : []),
         { id: "actions", header: "Acciones", cell: ({ row: { original: r } }) => {
