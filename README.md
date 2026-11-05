@@ -84,6 +84,8 @@ Estos ajustes requieren el permiso `lottery.settings` y quedan registrados en la
 
 «Borrar personalización global» retira los valores generales propios del consorcio para la modalidad seleccionada. En una banca, «Heredar del consorcio» elimina sus valores generales propios. «Usar valores heredados» elimina únicamente la excepción del sorteo o pareja seleccionados. Cada tabla indica si está personalizada o heredada; las eliminaciones se aplican al pulsar «Guardar configuración».
 
+La pestaña «Excepciones» muestra los valores propios de la banca y los valores que recibirá al heredarlos. Se puede retirar cada comisión, tabla de premios o ajuste de forma individual, o confirmar «Heredar todo del consorcio». El menú de cada banca también permite abrir esta vista. Los permisos de medios de cobro y forma de cuadre se exigen al restablecer esos ajustes; los cambios se aplican al guardar y conservan las validaciones de cajas abiertas.
+
 ### Formas de cuadre por consorcio y banca
 
 En Consorcios > Configuración > Forma de cuadre se define el valor del consorcio. Al elegir una banca en «Configurar», esta puede heredar el valor o mantener una excepción propia.

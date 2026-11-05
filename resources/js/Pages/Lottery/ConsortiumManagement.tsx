@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { router, usePage } from "@inertiajs/react";
 import { Dialog } from "@headlessui/react";
-import { Plus, Pencil, Trash2, Settings2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Settings2, RotateCcw } from "lucide-react";
 import Modal from "@/Components/Modal";
 import { DataTable, DataColumn } from "@/Components/ui/data-table";
 import { RowActions } from "@/Components/ui/row-actions";
@@ -48,6 +48,7 @@ export default function ConsortiumManagement({ tab, office, branches, management
             const manageable = tab === "roles" ? !r.is_system : tab === "users" ? r.can_manage : true;
             const actions = [
                 ...(tab === "branches" && can("lottery.settings") ? [{ label: "Configurar", icon: Settings2, onClick: () => configure(r) }] : []),
+                ...(tab === "branches" && can("lottery.settings") ? [{ label: "Ver excepciones", icon: RotateCcw, onClick: () => configure(r, "overrides") }] : []),
                 ...(edit && manageable ? [{ label: tab === "roles" ? "Editar rol y permisos" : "Editar", icon: Pencil, onClick: () => setEditor(r) }] : []),
                 ...(remove && manageable && !(tab === "roles" && r.is_system) && !(tab === "users" && r.id === auth.user.id) ? [{ label: "Eliminar", icon: Trash2, destructive: true, onClick: () => { setError(""); setDeleting(r); } }] : []),
             ];

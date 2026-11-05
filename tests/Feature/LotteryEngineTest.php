@@ -1128,6 +1128,33 @@ class LotteryEngineTest extends TestCase
         $this->assertSame($parent['rules'], $this->office->fresh()->lottery_settings['rules']);
     }
 
+    public function test_inheriting_all_branch_settings_preserves_payment_and_reconciliation_permission_checks(): void
+    {
+        $own = ['payment_methods' => ['transfer'], 'payment_reference_required' => ['transfer' => true], 'reconciliation_mode' => 'cash', 'footer' => 'Banca'];
+        $this->branch->update(['lottery_settings' => $own]);
+        $role = $this->seller->roles()->firstOrFail();
+        $payments = \App\Models\Permission::where('slug', 'lottery.payments.configure')->firstOrFail();
+        $reconciliation = \App\Models\Permission::where('slug', 'lottery.reconciliation.configure')->firstOrFail();
+        $data = ['scope' => 'branch', 'branch_id' => $this->branch->id, 'currency' => 'DOP', 'settings' => []];
+        $this->actingAs($this->seller);
+        $role->permissions()->detach($payments->id);
+        $this->seller->unsetRelation('roles');
+        $this->postJson('/lottery/settings', $data)->assertForbidden();
+        $this->assertSame($own, $this->branch->fresh()->lottery_settings);
+        $role->permissions()->attach($payments->id);
+        $role->permissions()->detach($reconciliation->id);
+        $this->seller->unsetRelation('roles');
+        $this->postJson('/lottery/settings', $data)->assertForbidden();
+        $this->assertSame($own, $this->branch->fresh()->lottery_settings);
+        $role->permissions()->attach($reconciliation->id);
+        $this->seller->unsetRelation('roles');
+        $this->postJson('/lottery/settings', $data)->assertRedirect();
+        $this->assertEmpty($this->branch->fresh()->lottery_settings);
+        $effective = app(Configuration::class)->effective($this->branch->fresh());
+        $this->assertSame(['cash'], $effective['payment_methods']);
+        $this->assertSame('cash', $effective['reconciliation_mode']);
+    }
+
     public function test_limits_crud_is_scoped_and_audited(): void
     {
         $this->actingAs($this->seller);

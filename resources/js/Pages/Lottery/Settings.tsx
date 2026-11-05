@@ -1,6 +1,7 @@
 import ComboboxSelect from "@/Components/ComboboxSelect";
 import PaymentMethodsEditor from "./PaymentMethodsEditor";
 import TariffRulesEditor from "./TariffRulesEditor";
+import BranchOverrides from "./BranchOverrides";
 import { clearTariffOverride } from "@/lib/tariffSettings";
 import { hasBranchOverrides } from "@/lib/branchSettings";
 import ConsortiumManagement from "./ConsortiumManagement";
@@ -35,7 +36,7 @@ export default function Settings({
     const can = (permission: string) => !!auth.user.is_super_admin || !!auth.user.permissions?.includes(permission);
     const [selectedBranchId, setSelectedBranchId] = useState<number | null>(initialBranch?.id ?? null);
     const branch = branches.find((b: any) => b.id === selectedBranchId) ?? null;
-    const tabIcons = { details: Building2, general: Settings2, draws: Ticket, rules: Trophy, pairs: GitMerge, branches: Store, users: Users, roles: Users };
+    const tabIcons = { details: Building2, general: Settings2, overrides: RotateCcw, draws: Ticket, rules: Trophy, pairs: GitMerge, branches: Store, users: Users, roles: Users };
     const [scope, setScope] = useState("office");
     const [tab, setTab] = useState(new URLSearchParams(window.location.search).get("tab") || "details");
     const [settings, setSettings] = useState<any>(
@@ -86,6 +87,7 @@ export default function Settings({
                     ["draws", "Sorteos"],
                     ["rules", "Comisiones y premios"],
                     ["pairs", "Súper palé"],
+                    ["overrides", "Excepciones"],
                     ["branches", "Bancas"],
                     ["users", "Usuarios"],
                     ["roles", "Roles y permisos"],
@@ -110,7 +112,7 @@ export default function Settings({
                 method="put"
                 initialValues={{ name: office.name, currency: office.currency, slogan: office.slogan ?? "", tax_id: office.tax_id ?? "", show_print_company_details: office.show_print_company_details, logo_url: office.logo_url, compact_logo_url: office.compact_logo_url }}
             />}
-            {["branches", "users", "roles"].includes(tab) && can(tab === "branches" ? "settings.branch-offices.view" : `${tab}.view`) && <ConsortiumManagement key={`${office.id}:${tab}`} tab={tab} office={office} branches={branches} management={management} configure={(b: any) => { setSelectedBranchId(b.id); setScope("branch"); setSettings(b.lottery_settings ?? {}); setTab("general"); }} />}
+            {["branches", "users", "roles"].includes(tab) && can(tab === "branches" ? "settings.branch-offices.view" : `${tab}.view`) && <ConsortiumManagement key={`${office.id}:${tab}`} tab={tab} office={office} branches={branches} management={management} configure={(b: any, nextTab = "general") => { setSelectedBranchId(b.id); setScope("branch"); setSettings(b.lottery_settings ?? {}); setTab(nextTab); }} />}
             <section className={`${panel} ${["details", "branches", "users", "roles"].includes(tab) ? "hidden" : ""}`}>
                 <div className="mb-6 flex flex-wrap items-center gap-4">
                     <Field label="Configurar">
@@ -136,6 +138,9 @@ export default function Settings({
                         Moneda única: {office.currency}
                     </span>
                 </div>
+                {tab === "overrides" && (scope === "branch"
+                    ? <BranchOverrides settings={settings} parent={parent} draws={draws} currency={office.currency} disabled={busy} can={can} errors={errors} onChange={setSettings} />
+                    : <p className="text-sm text-slate-500">Selecciona una banca en «Configurar» para ver sus excepciones y los valores que heredaría del consorcio.</p>)}
                 {tab === "general" && (
                     <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                         <PaymentMethodsEditor key={`${scope}:${selectedBranchId}`} settings={settings} parent={parent} branch={scope === 'branch'} disabled={!can('lottery.payments.configure')} errors={errors} onChange={setSettings} />
