@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { RotateCcw, Ticket } from 'lucide-react';
 import ComboboxSelect from '@/Components/ComboboxSelect';
 import Modal from '@/Components/Modal';
+import { clearTariffOverride } from '@/lib/tariffSettings';
 import { button, Draw, drawName, Field, input, modes, panel, secondary } from './shared';
 
 type Mode = 'quiniela' | 'pale' | 'tripleta';
@@ -60,16 +61,16 @@ export default function TariffRulesEditor({ settings, parent, draws, branch, onC
                     : mergeTariffs(parent.general_rules?.[mode], parent.rules?.[key], settings.general_rules?.[mode]);
                 const effective = mergeTariffs(inherited, own);
                 const change = (next: Tariff) => onChange({ ...settings, [section]: { ...entries, [key]: next } });
-                const inherit = () => {
-                    const copy = { ...entries };
-                    delete copy[key];
-                    onChange({ ...settings, [section]: copy });
-                };
+                const inherit = () => onChange(clearTariffOverride(settings, section, key));
+                const customized = Object.hasOwn(entries, key);
                 const prizeCategories = categories[mode].filter(category => general || mode !== 'quiniela' || Number(category) <= (draw?.result_count ?? 3));
                 const exceptions = exceptionKeys(mode).length;
 
                 return <section key={mode} className={`${panel} space-y-4`}>
-                    <h2 className="flex items-center gap-2 font-semibold"><Ticket size={16} aria-hidden />{modes[mode]}</h2>
+                    <div className="space-y-1">
+                        <h2 className="flex items-center gap-2 font-semibold"><Ticket size={16} aria-hidden />{modes[mode]}</h2>
+                        <p className="text-xs text-slate-500">{customized ? 'Personalizado' : general && !branch ? 'Sin configuración global propia' : 'Heredado'}</p>
+                    </div>
                     <Field label="Comisión sobre cobrado (%)">
                         <input aria-label={`Comisión de ${modes[mode]}`} className={input} type="number" min="0" max="100" step="0.01"
                             value={own.commission_bps == null ? '' : own.commission_bps / 100}
@@ -86,9 +87,9 @@ export default function TariffRulesEditor({ settings, parent, draws, branch, onC
                                 change({ ...own, payouts });
                             }} />
                     </Field>)}
-                    {(!general || branch) && <button type="button" className={`${secondary} inline-flex items-center gap-2`} onClick={inherit}>
-                        <RotateCcw size={16} aria-hidden />{general ? 'Heredar del consorcio' : 'Usar valores heredados'}
-                    </button>}
+                    <button type="button" disabled={!customized} className={`${secondary} inline-flex items-center gap-2 disabled:opacity-40`} onClick={inherit}>
+                        <RotateCcw size={16} aria-hidden />{general ? (branch ? 'Heredar del consorcio' : 'Borrar personalización global') : 'Usar valores heredados'}
+                    </button>
                     {general && exceptions > 0 && <div className="space-y-2 border-t border-slate-200 pt-3 dark:border-slate-700">
                         <p className="text-xs text-slate-500">{exceptions} sorteos tienen ajustes propios de {modes[mode]}.</p>
                         <button type="button" className={`${secondary} text-sm`} onClick={() => setResetMode(mode)}>Usar general en todos los sorteos</button>
@@ -105,9 +106,9 @@ export default function TariffRulesEditor({ settings, parent, draws, branch, onC
                 <div className="flex justify-end gap-2">
                     <button type="button" className={secondary} onClick={() => setResetMode(null)}>Cancelar</button>
                     <button type="button" className={button} onClick={() => {
-                        const rules = { ...settings.rules };
-                        for (const key of exceptionKeys(resetMode!)) delete rules[key];
-                        onChange({ ...settings, rules });
+                        let next = settings;
+                        for (const key of exceptionKeys(resetMode!)) next = clearTariffOverride(next, 'rules', key);
+                        onChange(next);
                         setResetMode(null);
                     }}>Usar general</button>
                 </div>

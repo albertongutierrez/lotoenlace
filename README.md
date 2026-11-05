@@ -82,6 +82,8 @@ En Consorcios > Comisiones y premios se configuran valores generales independien
 
 Estos ajustes requieren el permiso `lottery.settings` y quedan registrados en la auditoría de configuración. Los tickets conservan la tabla y comisión vigentes al venderse, aunque después cambie la configuración. La nueva configuración utiliza los campos JSON existentes.
 
+«Borrar personalización global» retira los valores generales propios del consorcio para la modalidad seleccionada. En una banca, «Heredar del consorcio» elimina sus valores generales propios. «Usar valores heredados» elimina únicamente la excepción del sorteo o pareja seleccionados. Cada tabla indica si está personalizada o heredada; las eliminaciones se aplican al pulsar «Guardar configuración».
+
 ### Formas de cuadre por consorcio y banca
 
 En Consorcios > Configuración > Forma de cuadre se define el valor del consorcio. Al elegir una banca en «Configurar», esta puede heredar el valor o mantener una excepción propia.

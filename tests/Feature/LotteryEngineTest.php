@@ -1089,6 +1089,45 @@ class LotteryEngineTest extends TestCase
         $this->postJson('/lottery/settings', $data)->assertForbidden();
     }
 
+    public function test_saving_inherited_tariffs_removes_stored_global_draw_and_pair_customizations(): void
+    {
+        $parent = $this->office->lottery_settings;
+        unset($parent['rules'][$this->a->id.':quiniela']);
+        $parent['general_rules'] = ['quiniela' => ['payouts' => ['1' => 60], 'commission_bps' => 1000]];
+        $parent['super_pale'] = ['enabled' => true, 'payouts' => ['1-1' => 2500]];
+        $parent['pairs'] = [];
+        $this->office->update(['lottery_settings' => $parent]);
+        $own = [
+            'footer' => 'Mi banca',
+            'general_rules' => ['quiniela' => ['payouts' => ['1' => 75]]],
+            'rules' => [$this->a->id.':quiniela' => ['payouts' => ['1' => 80]]],
+            'super_pale' => ['payouts' => ['1-1' => 2000]],
+            'pairs' => [$this->pair() => ['payouts' => ['1-1' => 1800]]],
+        ];
+        $data = ['scope' => 'branch', 'branch_id' => $this->branch->id, 'currency' => 'DOP'];
+        $this->actingAs($this->seller)->postJson('/lottery/settings', [...$data, 'settings' => $own])->assertRedirect();
+        $config = app(Configuration::class);
+        $this->assertSame(80, $config->effective($this->branch->fresh())['rules'][$this->a->id.':quiniela']['payouts']['1']);
+
+        unset($own['rules'], $own['pairs']);
+        $this->postJson('/lottery/settings', [...$data, 'settings' => $own])->assertRedirect();
+        $this->assertSame(75, $config->effective($this->branch->fresh())['rules'][$this->a->id.':quiniela']['payouts']['1']);
+        $this->assertSame(2000, $config->effective($this->branch->fresh())['pairs'][$this->pair()]['payouts']['1-1']);
+
+        unset($own['general_rules'], $own['super_pale']);
+        $this->postJson('/lottery/settings', [...$data, 'settings' => $own])->assertRedirect();
+        $this->assertSame(['footer' => 'Mi banca'], $this->branch->fresh()->lottery_settings);
+        $effective = $config->effective($this->branch->fresh());
+        $this->assertSame(60, $effective['rules'][$this->a->id.':quiniela']['payouts']['1']);
+        $this->assertSame(2500, $effective['pairs'][$this->pair()]['payouts']['1-1']);
+
+        unset($parent['general_rules'], $parent['super_pale']);
+        $this->postJson('/lottery/settings', ['scope' => 'office', 'currency' => 'DOP', 'settings' => $parent])->assertRedirect();
+        $this->assertArrayNotHasKey('general_rules', $this->office->fresh()->lottery_settings);
+        $this->assertArrayNotHasKey('super_pale', $this->office->fresh()->lottery_settings);
+        $this->assertSame($parent['rules'], $this->office->fresh()->lottery_settings['rules']);
+    }
+
     public function test_limits_crud_is_scoped_and_audited(): void
     {
         $this->actingAs($this->seller);

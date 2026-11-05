@@ -12,9 +12,9 @@ afterEach(cleanup);
 const draw = { id: 1, name: 'Sorteo A', lottery: { name: 'Lotería' }, modalities: ['quiniela', 'pale', 'tripleta', 'super_pale'], result_count: 3 } as Draw;
 const parent = { general_rules: { quiniela: { payouts: { 1: 60, 2: 10, 3: 5 }, commission_bps: 1000 } }, rules: { '1:quiniela': { payouts: { 1: 65 } } } };
 
-function Editor({ initial = {}, draws = [draw] }: { initial?: any; draws?: Draw[] }) {
+function Editor({ initial = {}, draws = [draw], branch = true }: { initial?: any; draws?: Draw[]; branch?: boolean }) {
     const [settings, setSettings] = useState(initial);
-    return <><TariffRulesEditor settings={settings} parent={parent} draws={draws} branch onChange={setSettings} /><output data-testid="settings">{JSON.stringify(settings)}</output></>;
+    return <><TariffRulesEditor settings={settings} parent={branch ? parent : {}} draws={draws} branch={branch} onChange={setSettings} /><output data-testid="settings">{JSON.stringify(settings)}</output></>;
 }
 
 test('permite una comisión y premios generales propios de cada modalidad', () => {
@@ -56,4 +56,23 @@ test('un sorteo de un número presenta únicamente su primer premio de quiniela'
     expect(screen.getByRole('spinbutton', { name: 'Premio 1 de Quiniela' })).toBeTruthy();
     expect(screen.queryByRole('spinbutton', { name: 'Premio 2 de Quiniela' })).toBeNull();
     expect(screen.queryByRole('spinbutton', { name: 'Premio 1-2 de Palé' })).toBeNull();
+});
+
+test('el consorcio puede borrar su personalización global conservando la excepción de un sorteo', () => {
+    const exception = { '1:quiniela': { payouts: { 1: 80 } } };
+    render(<Editor branch={false} initial={{ general_rules: parent.general_rules, rules: exception }} />);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Borrar personalización global' })[0]);
+    const settings = JSON.parse(screen.getByTestId('settings').textContent!);
+    expect(settings.general_rules).toBeUndefined();
+    expect(settings.rules).toEqual(exception);
+    expect((screen.getByRole('spinbutton', { name: 'Premio 1 de Quiniela' }) as HTMLInputElement).value).toBe('');
+    expect((screen.getAllByRole('button', { name: 'Borrar personalización global' })[0] as HTMLButtonElement).disabled).toBe(true);
+});
+
+test('heredar en la banca elimina la global propia y muestra de nuevo los valores del consorcio', () => {
+    render(<Editor initial={{ general_rules: { quiniela: { payouts: { 1: 75 }, commission_bps: 1500 } } }} />);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Heredar del consorcio' })[0]);
+    expect(JSON.parse(screen.getByTestId('settings').textContent!).general_rules).toBeUndefined();
+    expect((screen.getByRole('spinbutton', { name: 'Premio 1 de Quiniela' }) as HTMLInputElement).value).toBe('60');
+    expect((screen.getByRole('spinbutton', { name: 'Comisión de Quiniela' }) as HTMLInputElement).placeholder).toBe('10');
 });

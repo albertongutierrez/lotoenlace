@@ -1,6 +1,7 @@
 import ComboboxSelect from "@/Components/ComboboxSelect";
 import PaymentMethodsEditor from "./PaymentMethodsEditor";
 import TariffRulesEditor from "./TariffRulesEditor";
+import { clearTariffOverride } from "@/lib/tariffSettings";
 import ConsortiumManagement from "./ConsortiumManagement";
 import { ArrowLeft, Building2, Settings2, Ticket, Trophy, GitMerge, Store, Users, RotateCcw, Plus, Pencil, Save } from "lucide-react";
 import OfficeForm from "@/Pages/Settings/Offices/OfficeForm";
@@ -69,6 +70,7 @@ export default function Settings({
     const parentRule = generalPair ? (parent.super_pale ?? {})
         : { ...parent.super_pale, ...parent.pairs?.[pairKey], ...settings.super_pale };
     const ownRule = generalPair ? (settings.super_pale ?? {}) : (settings.pairs?.[pairKey] ?? {});
+    const pairCustomized = generalPair ? Object.hasOwn(settings, "super_pale") : Object.hasOwn(settings.pairs ?? {}, pairKey);
     const rule = { ...parentRule, ...ownRule };
     const setRule = (r: any) =>
         generalPair ? update("super_pale", r) : update("pairs", { ...settings.pairs, [pairKey]: r });
@@ -536,19 +538,21 @@ export default function Settings({
                                         </Field>
                                     ))}
                                 </div>
-                                {scope === "branch" && (
-                                    <button
-                                        className={`${secondary} inline-flex items-center gap-2`}
-                                        onClick={() => {
-                                            if (generalPair) { inherit("super_pale"); return; }
-                                            const copy = { ...settings.pairs };
-                                            delete copy[pairKey];
-                                            update("pairs", copy);
-                                        }}
-                                    >
-                                        <RotateCcw size={16} aria-hidden className="inline-block mr-1" />Heredar esta tabla del consorcio
-                                    </button>
-                                )}
+                                <p className="text-xs text-slate-500">
+                                    {pairCustomized ? "Personalizado"
+                                        : generalPair && scope === "office" ? "Sin configuración global propia" : "Heredado"}
+                                </p>
+                                <button
+                                    type="button"
+                                    className={`${secondary} inline-flex items-center gap-2 disabled:opacity-40`}
+                                    disabled={!pairCustomized}
+                                    onClick={() => setSettings((current: any) => generalPair
+                                        ? clearTariffOverride(current, "super_pale")
+                                        : clearTariffOverride(current, "pairs", pairKey))}
+                                >
+                                    <RotateCcw size={16} aria-hidden className="inline-block mr-1" />
+                                    {generalPair ? (scope === "branch" ? "Heredar del consorcio" : "Borrar personalización global") : "Usar valores heredados"}
+                                </button>
                             </>
                         )}
                     </div>
