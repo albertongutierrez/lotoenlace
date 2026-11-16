@@ -89,13 +89,13 @@ function SalesWorkspace({
         const onShortcut = (event: KeyboardEvent) => {
             if (event.ctrlKey || event.metaKey || event.shiftKey || event.isComposing) return;
             const shortcut = event.altKey
-                ? event.key.toLowerCase() === "a" ? "Alt+A" : event.key.toLowerCase() === "r" ? "Alt+R" : null
+                ? event.key.toLowerCase() === "a" ? "Alt+A" : event.key.toLowerCase() === "r" ? "Alt+R" : event.key.toLowerCase() === "s" ? "Alt+S" : null
                 : ["F1", "F2", "F3", "F4", "F11", "F6", "F7", "F8", "F9", "F10"].includes(event.key) ? event.key : null;
             if (!shortcut) return;
             const control = document.querySelector<HTMLButtonElement | HTMLInputElement>(`[data-sale-shortcut="${shortcut}"]`);
             if (!control) return;
             event.preventDefault();
-            if (event.repeat || document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"]') || control.disabled) return;
+            if (event.repeat || document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]') || control.disabled) return;
             control.click();
         };
         window.addEventListener("keydown", onShortcut);
@@ -260,7 +260,7 @@ function SalesWorkspace({
         setNumbers(value);
         setMode(enabled ? 'super_pale' : parsePlay(value)?.modality ?? 'quiniela');
     };
-    const panelSelected = superPale ? [...new Set([...superPairs.flat(), ...(pairStart === null ? [] : [pairStart])])] : selected;
+    const panelSelected = superPale ? (pairStart === null ? [] : [pairStart]) : selected;
     useEffect(() => {
         const timer = setInterval(() => setNow(Date.now()), 1000);
         return () => clearInterval(timer);
@@ -941,19 +941,30 @@ function SalesWorkspace({
             {ticket && <IssuedTicketModal key={ticket.reference ?? ticket.code} ticket={ticket} draws={draws} branch={branch} currency={currency} onClose={() => { setTicket(null); requestAnimationFrame(() => numbersRef.current?.focus()); }} />}
             <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_240px] grid-rows-[auto_minmax(0,1fr)] gap-3 md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
             <section aria-label="Selección de sorteos" className={`${panel} col-start-2 row-start-1 row-span-2 flex min-h-0 flex-col`}>
-                <div className="mb-3 grid shrink-0 gap-2 border-b border-slate-200 pb-3 dark:border-slate-700" role="group" aria-label="Filtrar por lotería">
-                    <div className="flex items-center justify-between gap-2"><span className={`text-sm font-semibold ${superPale ? 'text-slate-500' : ''}`}>Regulares</span><label className={`inline-flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-2 text-sm font-semibold ${superPale ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'border-slate-300 dark:border-slate-700'}`}><input type="checkbox" checked={superPale} disabled={busy} onChange={e => toggleSuperPale(e.target.checked)} className="rounded border-slate-400 text-emerald-600 focus:ring-emerald-500" />Súper palé</label></div>
-                    <ComboboxSelect aria-label="Filtrar por lotería" className={input} value={lotteryFilter ?? ""} onChange={e => setLotteryFilter(e.target.value ? Number(e.target.value) : null)}><option value="">Todas las loterías</option>{Array.from(new Map<number, { id: number; name: string }>(draws.filter((d: Draw) => isOpen(d.id)).map((d: Draw) => [d.lottery_id, { id: d.lottery_id, name: d.lottery?.name ?? "Lotería" }])).values()).map(lottery => <option key={lottery.id} value={lottery.id}>{lottery.name}</option>)}</ComboboxSelect>
+                <div className="mb-2 grid shrink-0 gap-2 border-b border-slate-200 pb-2 dark:border-slate-700" role="group" aria-label="Modalidad y selección de sorteos">
                     <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{superPale ? `${superPairs.length} ${superPairs.length === 1 ? 'pareja seleccionada' : 'parejas seleccionadas'}` : `${selected.length} ${selected.length === 1 ? 'sorteo seleccionado' : 'sorteos seleccionados'}`}</span>
-                        <button type="button" title="Limpiar selección" aria-label="Limpiar selección" disabled={busy || !panelSelected.length} onClick={() => { if (superPale) { setSuperPairs([]); setPairStart(null); setPairError(''); } else setSelected([]); setSelectedOnly(false); }} className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"><Eraser className="h-3.5 w-3.5" />Limpiar</button>
+                        <span className={`text-xs font-semibold ${superPale ? 'text-slate-500' : ''}`}>Regulares</span>
+                        <label title="Activar o desactivar súper palé (Alt+S)" className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold ${superPale ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-300'}`}>
+                            <input type="checkbox" aria-label="Súper palé" checked={superPale} disabled={busy} data-sale-shortcut="Alt+S" aria-keyshortcuts="Alt+S" onChange={e => toggleSuperPale(e.target.checked)} className="rounded border-slate-400 text-emerald-600 focus:ring-emerald-500" />
+                            Súper palé <kbd aria-hidden="true" className="rounded border border-current/20 px-1 text-[10px] font-normal">Alt+S</kbd>
+                        </label>
                     </div>
-                    <button type="button" aria-pressed={selectedOnly} onClick={() => setSelectedOnly(value => !value)} className={`flex w-full items-center justify-center gap-2 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors ${selectedOnly ? "border-emerald-600 bg-emerald-700 text-white" : "border-slate-300 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"}`}><ListChecks className="h-4 w-4" />Solo seleccionados</button>
-                    {superPale && <div className="space-y-1 text-xs"><p role="status" className="text-slate-600 dark:text-slate-400">{pairStart === null ? 'Elige dos sorteos para añadir una pareja.' : `Combinar ${draws.find((d: Draw) => d.id === pairStart)?.name} con…`}</p>{pairStart !== null && <button type="button" className="text-emerald-700 underline dark:text-emerald-400" disabled={busy} onClick={() => { setPairStart(null); setPairError(''); }}>Cancelar pareja en preparación</button>}{pairError && <p role="alert" className="text-amber-700 dark:text-amber-400">{pairError}</p>}</div>}
+                    {!superPale && <>
+                        <ComboboxSelect aria-label="Filtrar por lotería" className={input} value={lotteryFilter ?? ""} onChange={e => setLotteryFilter(e.target.value ? Number(e.target.value) : null)}><option value="">Todas las loterías</option>{Array.from(new Map<number, { id: number; name: string }>(draws.filter((d: Draw) => isOpen(d.id)).map((d: Draw) => [d.lottery_id, { id: d.lottery_id, name: d.lottery?.name ?? "Lotería" }])).values()).map(lottery => <option key={lottery.id} value={lottery.id}>{lottery.name}</option>)}</ComboboxSelect>
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{selected.length} {selected.length === 1 ? 'sorteo seleccionado' : 'sorteos seleccionados'}</span>
+                            <button type="button" title="Limpiar selección" aria-label="Limpiar selección" disabled={busy || !selected.length} onClick={() => { setSelected([]); setSelectedOnly(false); }} className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"><Eraser className="h-3.5 w-3.5" />Limpiar</button>
+                        </div>
+                        <button type="button" aria-pressed={selectedOnly} onClick={() => setSelectedOnly(value => !value)} className={`flex w-full items-center justify-center gap-2 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors ${selectedOnly ? "border-emerald-600 bg-emerald-700 text-white" : "border-slate-300 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"}`}><ListChecks className="h-4 w-4" />Solo seleccionados</button>
+                    </>}
+                    {superPale && <div className="space-y-1 text-xs">
+                        <div className="flex items-start gap-2"><p role="status" className="min-w-0 flex-1 text-slate-600 dark:text-slate-400">{pairStart === null ? 'Elige dos sorteos para añadir una pareja.' : `Combinar ${draws.find((d: Draw) => d.id === pairStart)?.name} con…`}</p>{pairStart !== null && <button type="button" aria-label="Cancelar pareja en preparación" title="Cancelar pareja en preparación" className="shrink-0 rounded text-slate-500 hover:text-red-500" disabled={busy} onClick={() => { setPairStart(null); setPairError(''); }}><X size={14} /></button>}</div>
+                        {pairError && <p role="alert" className="text-amber-700 dark:text-amber-400">{pairError}</p>}
+                    </div>}
                 </div>
                 <div tabIndex={0} aria-label="Sorteos disponibles" className="grid min-h-0 flex-1 auto-rows-max grid-cols-1 content-start gap-2 overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin] [scrollbar-color:#94a3b8_#f1f5f9] dark:[scrollbar-color:#475569_#0f172a]">
                     {draws
-                        .filter((d: Draw) => isOpen(d.id) && (!superPale || d.modalities.includes('super_pale')) && (lotteryFilter === null || d.lottery_id === lotteryFilter) && (!selectedOnly || panelSelected.includes(d.id)))
+                        .filter((d: Draw) => isOpen(d.id) && (superPale ? d.modalities.includes('super_pale') : (lotteryFilter === null || d.lottery_id === lotteryFilter) && (!selectedOnly || selected.includes(d.id))))
                         .sort((a: Draw, b: Draw) => getWindow(a).close - getWindow(b).close || a.closes_at.localeCompare(b.closes_at) || a.name.localeCompare(b.name, "es") || a.id - b.id)
                         .map((d: Draw) => {
                             const seconds = Math.max(
@@ -999,7 +1010,7 @@ function SalesWorkspace({
                             );
                         })}
                 </div>
-                {selectedOnly && !draws.some((d: Draw) => isOpen(d.id) && panelSelected.includes(d.id) && (lotteryFilter === null || d.lottery_id === lotteryFilter)) && <p className="py-2 text-sm text-slate-500">No hay sorteos seleccionados para este filtro.</p>}
+                {!superPale && selectedOnly && !draws.some((d: Draw) => isOpen(d.id) && selected.includes(d.id) && (lotteryFilter === null || d.lottery_id === lotteryFilter)) && <p className="py-2 text-sm text-slate-500">No hay sorteos seleccionados para este filtro.</p>}
                 {!draws.some((d: Draw) => isOpen(d.id)) && (
                     <p className="text-sm text-slate-500">
                         No hay sorteos abiertos y habilitados. Revisa el
@@ -1007,7 +1018,13 @@ function SalesWorkspace({
                     </p>
                 )}
                 {superPale && draws.some((d: Draw) => isOpen(d.id)) && !draws.some((d: Draw) => isOpen(d.id) && d.modalities.includes('super_pale')) && <p className="py-2 text-sm text-slate-500">No hay sorteos abiertos habilitados para súper palé.</p>}
-                {superPale && <section aria-label="Parejas de súper palé" className="mt-3 flex max-h-[40%] min-h-24 shrink-0 flex-col rounded-lg border border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/30"><h2 className="shrink-0 border-b border-emerald-200 px-3 py-2 text-xs font-semibold dark:border-emerald-900">Combinaciones a jugar · {superPairs.length}</h2><ul className="min-h-0 space-y-2 overflow-y-auto p-2">{superPairs.map(([first, second]) => { const name = [first, second].map(id => draws.find((d: Draw) => d.id === id)?.name ?? `Sorteo #${id}`).join(' + '); return <li key={`${first}-${second}`} className="flex items-start gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-2 dark:border-slate-700 dark:bg-slate-900"><span className="min-w-0 flex-1 break-words text-xs font-medium leading-5">{name}</span><button type="button" aria-label={`Quitar pareja ${name}`} title="Quitar pareja" disabled={busy} onClick={() => setSuperPairs(pairs => pairs.filter(pair => pair[0] !== first || pair[1] !== second))} className="shrink-0 rounded p-0.5 text-slate-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"><X size={15} /></button></li>; })}{!superPairs.length && <li className="p-1 text-xs text-slate-500">Las parejas que elijas aparecerán aquí.</li>}</ul></section>}
+                {superPale && <section aria-label="Parejas de súper palé" className="mt-3 flex min-h-0 flex-1 flex-col rounded-lg border border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/30">
+                    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-emerald-200 px-3 py-2 dark:border-emerald-900">
+                        <h2 className="text-xs font-semibold">Combinaciones a jugar · {superPairs.length}</h2>
+                        <button type="button" aria-label="Limpiar combinaciones" title="Limpiar combinaciones" disabled={busy || (!superPairs.length && pairStart === null)} onClick={() => { setSuperPairs([]); setPairStart(null); setPairError(''); }} className="inline-flex shrink-0 items-center gap-1 rounded px-1 py-0.5 text-xs text-slate-500 hover:text-red-600 disabled:opacity-40 dark:text-slate-400"><Eraser size={13} />Limpiar</button>
+                    </div>
+                    <ul className="min-h-0 space-y-2 overflow-y-auto p-2">{superPairs.map(([first, second]) => { const name = [first, second].map(id => draws.find((d: Draw) => d.id === id)?.name ?? `Sorteo #${id}`).join(' + '); return <li key={`${first}-${second}`} className="flex items-start gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-2 dark:border-slate-700 dark:bg-slate-900"><span className="min-w-0 flex-1 break-words text-xs font-medium leading-5">{name}</span><button type="button" aria-label={`Quitar pareja ${name}`} title="Quitar pareja" disabled={busy} onClick={() => setSuperPairs(pairs => pairs.filter(pair => pair[0] !== first || pair[1] !== second))} className="shrink-0 rounded p-0.5 text-slate-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"><X size={15} /></button></li>; })}{!superPairs.length && <li className="p-1 text-xs text-slate-500">Las parejas que elijas aparecerán aquí.</li>}</ul>
+                </section>}
             </section>
             <section className={`${panel} shrink-0`}>
                 <form

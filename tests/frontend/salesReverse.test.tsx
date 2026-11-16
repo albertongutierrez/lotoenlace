@@ -33,11 +33,11 @@ function draftLines() {
     const saved = JSON.parse(sessionStorage.getItem(storageKey)!);
     return saved.drafts.find((draft: any) => draft.id === saved.activeId).lines;
 }
-async function mount(drawModalities: Record<number, string[]> = {}, settings: Record<string, unknown> = {}) {
+async function mount(drawModalities: Record<number, string[]> = {}, settings: Record<string, unknown> = {}, lotteryIds: Record<number, number> = {}) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
     clients.push(client);
     const ids = [...new Set([1, 2, ...Object.keys(drawModalities).map(Number)])];
-    render(<QueryClientProvider client={client}><Sales branch={{ id: 1, office_id: 1, code: 'PRUEBA' }} currency="DOP" settings={{ draw_ids: ids, pairs: {}, discount_enabled: false, ...settings }} server_now={new Date().toISOString()} draws={ids.map(id => ({ id, name: `Sorteo ${id}`, lottery_id: 1, lottery: { name: 'Prueba', active: true }, active: true, opens_at: '00:00:00', closes_at: '23:59:59', weekdays: [0, 1, 2, 3, 4, 5, 6], modalities: drawModalities[id] ?? ['quiniela', 'pale', 'tripleta'] }))} /></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><Sales branch={{ id: 1, office_id: 1, code: 'PRUEBA' }} currency="DOP" settings={{ draw_ids: ids, pairs: {}, discount_enabled: false, ...settings }} server_now={new Date().toISOString()} draws={ids.map(id => ({ id, name: `Sorteo ${id}`, lottery_id: lotteryIds[id] ?? 1, lottery: { name: lotteryIds[id] ? `Prueba ${lotteryIds[id]}` : 'Prueba', active: true }, active: true, opens_at: '00:00:00', closes_at: '23:59:59', weekdays: [0, 1, 2, 3, 4, 5, 6], modalities: drawModalities[id] ?? ['quiniela', 'pale', 'tripleta'] }))} /></QueryClientProvider>);
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull(), { timeout: 5000 });
     return userEvent.setup();
 }
@@ -83,7 +83,14 @@ test('Súper palé agrega solo las tres parejas elegidas y conserva la selecció
 test('Súper palé admite un sorteo en varias parejas, impide duplicados y permite quitarlas', async () => {
     const user = await mount({ 1: superModalities, 2: superModalities, 3: superModalities }, { pairs: { '1-2': { enabled: true }, '1-3': { enabled: true } } });
     await user.click(screen.getByRole('checkbox', { name: 'Súper palé' }));
-    await choosePair(user, 1, 2); await choosePair(user, 1, 3);
+    const draw = (id: number) => screen.getByRole('button', { name: new RegExp(`^Sorteo ${id}`) });
+    await user.click(draw(1));
+    expect(draw(1).getAttribute('aria-pressed')).toBe('true');
+    await user.click(draw(2));
+    expect(draw(1).getAttribute('aria-pressed')).toBe('false');
+    expect(draw(2).getAttribute('aria-pressed')).toBe('false');
+    await choosePair(user, 1, 3);
+    expect(screen.queryAllByRole('button', { name: /^Sorteo/, pressed: true })).toHaveLength(0);
     await choosePair(user, 2, 1);
     expect(screen.getByText('Esta pareja ya está en la lista.')).toBeTruthy();
     const block = screen.getByRole('region', { name: 'Parejas de súper palé' });
@@ -95,8 +102,8 @@ test('Súper palé admite un sorteo en varias parejas, impide duplicados y permi
     await enterPlay(user, '1020.');
     await waitFor(() => expect(draftLines()).toHaveLength(2));
     expect(draftLines().map((line: any) => [line.draw_id, line.second_draw_id, line.numbers])).toEqual([[1, 3, '10-20'], [1, 3, '01-02']]);
-    await user.click(screen.getByRole('button', { name: 'Limpiar selección', exact: true }));
-    expect(screen.getByText('0 parejas seleccionadas')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Limpiar combinaciones', exact: true }));
+    expect(screen.getByRole('heading', { name: 'Combinaciones a jugar · 0' })).toBeTruthy();
     expect(draftLines()).toHaveLength(2);
 });
 
@@ -114,7 +121,7 @@ test('Súper palé requiere una pareja completa y la conserva por cada ticket en
     expect((screen.getByRole('checkbox', { name: 'Súper palé' }) as HTMLInputElement).checked).toBe(false);
     await user.click(screen.getByRole('tab', { name: /Ticket 1/ }));
     expect((screen.getByRole('checkbox', { name: 'Súper palé' }) as HTMLInputElement).checked).toBe(true);
-    expect(screen.getByText('1 pareja seleccionada')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Combinaciones a jugar · 1' })).toBeTruthy();
     await enterPlay(user, '1020');
     await waitFor(() => expect(draftLines()).toHaveLength(1));
     const saved = JSON.parse(sessionStorage.getItem(storageKey)!);
@@ -127,11 +134,10 @@ test('el sufijo s abre la selección de parejas y vender limpia las parejas y So
     await user.click(screen.getByRole('button', { name: 'Solo seleccionados' }));
     await user.type(screen.getByLabelText('Jugada', { exact: true }), '1020s');
     expect((screen.getByRole('checkbox', { name: 'Súper palé' }) as HTMLInputElement).checked).toBe(true);
-    expect(screen.getByRole('button', { name: 'Solo seleccionados' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByRole('button', { name: 'Solo seleccionados' })).toBeNull();
     await choosePair(user, 1, 2);
     await enterPlay(user, '1020');
     await waitFor(() => expect(draftLines()).toHaveLength(1));
-    await user.click(screen.getByRole('button', { name: 'Solo seleccionados' }));
     await user.click(screen.getByRole('button', { name: /Vender/ }));
     await screen.findByText('Cobrar ticket');
     vi.mocked(axios.post).mockImplementation(async url => String(url) === '/lottery/sales' ? { data: {
@@ -145,8 +151,44 @@ test('el sufijo s abre la selección de parejas y vender limpia las parejas y So
     expect(saved.drafts.find((draft: any) => draft.id === saved.activeId)).toMatchObject({ selected: [], superPairs: [] });
     await user.click(screen.getByRole('button', { name: 'Cerrar', exact: true }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByText('0 parejas seleccionadas')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Combinaciones a jugar · 0' })).toBeTruthy();
+    await user.click(screen.getByRole('checkbox', { name: 'Súper palé' }));
     expect(screen.getByRole('button', { name: 'Solo seleccionados' }).getAttribute('aria-pressed')).toBe('false');
+});
+
+test('Alt+S oculta y omite los filtros regulares, restaura el filtro al salir y respeta modales', async () => {
+    const user = await mount({ 1: superModalities, 2: superModalities }, { pairs: { '1-2': { enabled: true } } }, { 1: 1, 2: 2 });
+    await user.click(screen.getByRole('combobox', { name: 'Filtrar por lotería' }));
+    await user.click(await screen.findByRole('option', { name: 'Prueba 1', exact: true }));
+    await user.click(screen.getByRole('button', { name: /^Sorteo 1/ }));
+    await user.click(screen.getByRole('button', { name: 'Solo seleccionados' }));
+    expect(screen.queryByRole('button', { name: /^Sorteo 2/ })).toBeNull();
+    await user.click(screen.getByLabelText('Jugada', { exact: true }));
+    await user.keyboard('{Alt>}s{/Alt}');
+    const toggle = screen.getByRole('checkbox', { name: 'Súper palé' }) as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+    expect(toggle.getAttribute('aria-keyshortcuts')).toBe('Alt+S');
+    expect(screen.queryByRole('combobox', { name: 'Filtrar por lotería' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Solo seleccionados' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Limpiar selección', exact: true })).toBeNull();
+    await choosePair(user, 1, 2);
+    expect(screen.getByRole('heading', { name: 'Combinaciones a jugar · 1' })).toBeTruthy();
+    fireEvent.keyDown(window, { key: 's', altKey: true, repeat: true });
+    expect(toggle.checked).toBe(true);
+    await user.keyboard('{Alt>}s{/Alt}');
+    expect(toggle.checked).toBe(false);
+    expect((screen.getByRole('combobox', { name: 'Filtrar por lotería' }) as HTMLInputElement).value).toBe('Prueba 1');
+    expect(screen.queryByRole('button', { name: /^Sorteo 2/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /^Sorteo 1/ }).getAttribute('aria-pressed')).toBe('true');
+    await user.click(screen.getByRole('button', { name: 'Duplicar F4' }));
+    await screen.findByLabelText('Número del ticket');
+    await user.keyboard('{Alt>}s{/Alt}');
+    expect(toggle.checked).toBe(false);
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await user.keyboard('{Alt>}s{/Alt}');
+    expect(toggle.checked).toBe(true);
+    expect(screen.getByRole('heading', { name: 'Combinaciones a jugar · 1' })).toBeTruthy();
 });
 
 const duplicateQr = '514011a0-42cb-42f5-b074-331a834bb98e';
