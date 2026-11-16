@@ -252,11 +252,11 @@ export default function Settings({
                                 )}
                             </div>
                         ))}
-                        {["discount_enabled", "show_qr"].map((k) => (
+                        {["discount_enabled", "show_qr", "copy_consortium_tickets"].map((k) => (
                             <Field
                                 key={k}
                                 label={
-                                    k === "show_qr"
+                                    k === "copy_consortium_tickets" ? "Copiar tickets de otras bancas del consorcio" : k === "show_qr"
                                         ? "Mostrar QR en el ticket"
                                         : "Descuento habilitado"
                                 }

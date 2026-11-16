@@ -11,7 +11,7 @@ class Configuration
 {
     public const PAYMENT_METHODS = ['cash'=>'Efectivo', 'transfer'=>'Transferencia', 'card'=>'Tarjeta', 'deposit'=>'Depósito'];
     public const DEFAULTS = ['payment_methods' => ['cash'], 'payment_method_labels' => [], 'payment_reference_required' => [], 'reconciliation_mode' => 'cash', 'daily_limit_minor' => null, 'consortium_limit_minor' => null, 'cancel_minutes' => 5,
-        'reprint_minutes' => 15, 'show_qr' => false, 'discount_enabled' => false, 'discount_every_minor' => 1000,
+        'reprint_minutes' => 15, 'show_qr' => false, 'copy_consortium_tickets' => false, 'discount_enabled' => false, 'discount_every_minor' => 1000,
         'discount_amount_minor' => 100, 'footer' => '', 'draw_ids' => [], 'general_rules' => [], 'rules' => [], 'pairs' => [], 'super_pale' => []];
 
     public function effective(BranchOffice $branch): array

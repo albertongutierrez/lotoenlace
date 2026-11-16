@@ -16,6 +16,29 @@ const config = { issuer: 'https://loto.example', publicKey: pair.publicKey, toke
 function job(overrides={}) { return { version:1, id:randomUUID(), issuer:config.issuer, issued_at:Math.floor(Date.now()/1000), expires_at:Math.floor(Date.now()/1000)+120, audit_id:1, audit_number:1, target:{device_id:config.deviceId,printer:'Térmica USB',profile:'epson',paper_width:80,cut:true}, receipt:{reference:'T-000001',code:randomUUID(),branch:'001',date:'21/10/2026 11:00 AM',pin:'000042',currency:'DOP',lines:[{draw:'Quiniela LoteDom con nombre completo',numbers:'10',modality:'quiniela',amount_minor:100}],gross_minor:100,discount_minor:0,net_minor:100,received_minor:200,change_minor:100,show_qr:true,footer:'Gracias por su compra',kind:'original',sequence:1}, ...overrides }; }
 function sign(data) { const json=Buffer.from(JSON.stringify(data));return {payload:json.toString('base64'),signature:createSign('RSA-SHA256').update(json).end().sign(pair.privateKey,'base64')}; }
 const listPrinters = async()=>[{name:'Térmica USB',offline:false,virtual:false},{name:'Microsoft Print to PDF',virtual:true}];
+
+test('selecciona el tamaño de texto en Epson y Star para ambos anchos sin perder el contenido', async () => {
+ for (const profile of ['epson', 'star']) for (const width of [58, 80]) for (const size of ['small', 'normal', 'large']) {
+  const data = job();
+  Object.assign(data.target, { profile, paper_width: width, text_size: size });
+  data.receipt.show_qr = false;
+  data.receipt.company_name = 'Consorcio';
+  const bytes = await renderReceipt(data);
+  const font = profile === 'epson' ? [0x1b, 0x4d, size === 'small' ? 1 : 0] : [0x1b, 0x1e, 0x46, size === 'small' ? 1 : 0];
+  assert.ok(bytes.includes(Buffer.from(font)));
+  const start = bytes.indexOf(Buffer.from('Ticket:'));
+  const end = bytes.indexOf(Buffer.from('TOTAL'));
+  const body = bytes.subarray(start, end);
+  if (size === 'large') {
+   const reset = profile === 'epson' ? [0x1b, 0x21, 0] : [0x1b, 0x69, 0, 0];
+   assert.ok(!body.includes(Buffer.from(reset)));
+  }
+  assert.ok(bytes.includes(Buffer.from('000042')));
+  assert.ok(bytes.includes(Buffer.from('RD$1.00')));
+ }
+ const data = job(); data.target.text_size = 'huge';
+ await assert.rejects(renderReceipt(data), /texto inválido/);
+});
 async function queue(t,spoolRaw,options={}) { const dir=await mkdtemp(join(tmpdir(),'loto-agent-'));t.after(()=>rm(dir,{recursive:true,force:true}));const ledgerPath=join(dir,'jobs.json');return new JobQueue({config,ledgerPath,listPrinters,spoolRaw,...options}); }
 
 test('solo admite firmas vigentes del sistema y del equipo de destino',()=>{

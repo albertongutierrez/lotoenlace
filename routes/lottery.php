@@ -30,6 +30,7 @@ Route::middleware(['auth', 'verified', EnsureActiveBranch::class, 'permission.ro
     Route::post('sales', [LotteryController::class, 'sell'])->name('sell');
     Route::get('tickets', [LotteryController::class, 'tickets'])->name('tickets');
     Route::get('tickets/{code}', [LotteryController::class, 'ticket'])->name('ticket');
+    Route::get('copy-ticket/{code}', [LotteryController::class, 'copyTicket'])->name('copy-ticket');
     Route::post('tickets/{code}/print', [LotteryController::class, 'requestPrint'])->name('print');
     Route::post('tickets/{code}/print-status', [LotteryController::class, 'printStatus'])->name('print-status');
     Route::get('tickets/{code}/print-history', [LotteryController::class, 'printHistory'])->name('print-history');

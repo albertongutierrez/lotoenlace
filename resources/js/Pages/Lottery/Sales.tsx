@@ -510,10 +510,10 @@ function SalesWorkspace({
         try {
             if (!duplicateSource) {
             const data = await queryClient.fetchQuery({
-                queryKey: ["lottery", "ticket", auth.user.id, branch.id, code],
+                queryKey: ["lottery", "copy-ticket", auth.user.id, branch.id, !!settings.copy_consortium_tickets, code],
                 staleTime: 0,
                 queryFn: async ({ signal }) => (await axios.get(
-                    `/lottery/tickets/${encodeURIComponent(code)}`,
+                    `/lottery/copy-ticket/${encodeURIComponent(code)}`,
                     { params: { branch_id: branch.id }, signal },
                 )).data,
             });
@@ -525,7 +525,7 @@ function SalesWorkspace({
                 amount: (l.amount_minor / 100).toFixed(2),
             }));
             if (!copied.length) throw Error("El ticket no tiene jugadas para copiar.");
-            setDuplicateReference(data.reference ?? code);
+            setDuplicateReference(`${data.reference ?? code}${data.source_branch ? ` · Banca ${data.source_branch}` : ''}`);
             setDuplicateSource(copied);
             const ids = Array.from(new Set<number>(copied.flatMap((line: Line) => [line.draw_id, ...(line.second_draw_id ? [line.second_draw_id] : [])])));
             setDuplicateTargets(Object.fromEntries(ids.map(id => [id, isOpen(id) ? id : 0])));
@@ -565,7 +565,7 @@ function SalesWorkspace({
             setDuplicateOpen(false);
             setDuplicateCode("");
         } catch (e: any) {
-            setDuplicateError(e.response?.status === 404 ? "No encontramos ese ticket en esta banca. Revisa el número o código QR e intenta nuevamente." : e.response?.data?.message ?? e.message ?? "No se pudo cargar el ticket.");
+            setDuplicateError(e.response?.status === 404 ? `No encontramos ese ticket en ${settings.copy_consortium_tickets ? 'este consorcio' : 'esta banca'}. Revisa el número o código QR e intenta nuevamente.` : e.response?.data?.message ?? e.message ?? "No se pudo cargar el ticket.");
         } finally {
             duplicateBusyRef.current = false;
             setDuplicating(false);
@@ -846,7 +846,7 @@ function SalesWorkspace({
                         <div className="space-y-2">
                             <label htmlFor="duplicate-ticket-code" className="block text-sm font-medium">{duplicateUsesQr ? "Código QR del ticket" : "Número del ticket"}</label>
                             <div className="relative">{duplicateUsesQr ? <QrCode aria-hidden="true" className="pointer-events-none absolute left-3 top-3 h-5 w-5 text-slate-400" /> : <Tickets aria-hidden="true" className="pointer-events-none absolute left-3 top-3 h-5 w-5 text-slate-400" />}<input ref={duplicateInputRef} id="duplicate-ticket-code" autoFocus data-autofocus autoComplete="off" spellCheck={false} disabled={duplicating} className={`${input} pl-10 font-mono`} placeholder={duplicateUsesQr ? "Escanea o pega el código QR" : "T-000012 o 12"} value={duplicateCode} onChange={e => { setDuplicateCode(e.target.value); setDuplicateError(""); setDuplicateSource(null); setDuplicateTargets({}); setDuplicateReference(""); }} aria-invalid={!!duplicateError} aria-describedby={`duplicate-ticket-help${duplicateError ? ' duplicate-ticket-error' : ''}`} /></div>
-                            <p id="duplicate-ticket-help" className="text-xs text-slate-500 dark:text-slate-400">{duplicateUsesQr ? "Escanea o pega el QR: se consultará automáticamente. Después pulsa Enter para cargar las jugadas." : "Usa el número impreso en el ticket de esta banca, con o sin T-."}</p>
+                            <p id="duplicate-ticket-help" className="text-xs text-slate-500 dark:text-slate-400">{duplicateUsesQr ? "Escanea o pega el QR: se consultará automáticamente. Después pulsa Enter para cargar las jugadas." : `Usa el número impreso en el ticket de ${settings.copy_consortium_tickets ? 'cualquier banca de este consorcio' : 'esta banca'}, con o sin T-.`}</p>
                         </div>
                         {duplicateError && <p id="duplicate-ticket-error" role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{duplicateError}</p>}
                         <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">Consulta el ticket y elige a qué sorteo abierto trasladar cada grupo de jugadas. El ticket original se conserva; la nueva venta se emite al pulsar Vender.</div>

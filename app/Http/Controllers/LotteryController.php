@@ -228,7 +228,7 @@ class LotteryController extends Controller
 
         $data = $r->validate(['scope' => ['required', Rule::in(['office', 'branch'])], 'currency' => ['required', Rule::in(['DOP', 'USD', 'EUR', 'HTG'])],
 
-            'settings' => 'present|array:payment_methods,payment_method_labels,payment_reference_required,reconciliation_mode,daily_limit_minor,consortium_limit_minor,cancel_minutes,reprint_minutes,show_qr,discount_enabled,discount_every_minor,discount_amount_minor,footer,draw_ids,general_rules,rules,pairs,super_pale',
+            'settings' => 'present|array:payment_methods,payment_method_labels,payment_reference_required,reconciliation_mode,daily_limit_minor,consortium_limit_minor,cancel_minutes,reprint_minutes,show_qr,copy_consortium_tickets,discount_enabled,discount_every_minor,discount_amount_minor,footer,draw_ids,general_rules,rules,pairs,super_pale',
 
             'settings.payment_methods' => 'nullable|array|list|min:1|max:100',
             'settings.payment_methods.*' => ['required', 'string', 'regex:/^(cash|transfer|card|deposit|custom_[a-f0-9]{12})$/D', 'distinct'],
@@ -243,6 +243,7 @@ class LotteryController extends Controller
             'settings.cancel_minutes' => 'nullable|integer|between:0,1440', 'settings.reprint_minutes' => 'nullable|integer|between:0,1440',
 
             'settings.show_qr' => 'nullable|boolean', 'settings.discount_enabled' => 'nullable|boolean',
+            'settings.copy_consortium_tickets' => 'nullable|boolean',
 
             'settings.discount_every_minor' => 'nullable|integer|min:1|max:999999999', 'settings.discount_amount_minor' => 'nullable|integer|min:0|max:999999999',
 
@@ -696,6 +697,21 @@ class LotteryController extends Controller
 
     }
 
+    public function copyTicket(Request $r, string $code, Configuration $config)
+    {
+        $branch = $this->branch($r);
+        $settings = $config->effective($branch);
+        $ticket = Ticket::select(['id', 'code', 'office_number', 'branch_office_id'])->where('office_id', $branch->office_id)
+            ->when(! $settings['copy_consortium_tickets'], fn ($query) => $query->where('branch_office_id', $branch->id))
+            ->withReference($code)->firstOrFail();
+        $source = \App\Models\BranchOffice::withTrashed()->findOrFail($ticket->branch_office_id);
+
+        return response()->json([
+            'reference' => $ticket->reference, 'source_branch' => $source->code,
+            'lines' => $ticket->lines()->get(['draw_id', 'second_draw_id', 'modality', 'numbers', 'amount_minor']),
+        ])->header('Cache-Control', 'no-store, private');
+    }
+
 
 
     public function printHistory(Request $r, string $code)
@@ -720,6 +736,7 @@ class LotteryController extends Controller
             'printer' => 'required_if:transport,local|string|max:200', 'profile' => 'required_if:transport,local|in:epson,star',
             'paper_width' => 'required_if:transport,local|integer|in:58,80', 'cut' => 'required_if:transport,local|boolean',
             'feed_lines' => 'sometimes|integer|min:0|max:15',
+            'text_size' => 'sometimes|in:small,normal,large',
             'document_type' => 'sometimes|in:sale,payout,continuation', 'payment_id' => 'required_if:document_type,payout,continuation|integer|min:1',
         ]);
         $target = ['transport' => $data['transport'] ?? 'browser'];
@@ -728,6 +745,7 @@ class LotteryController extends Controller
             $target['paper_width'] = (int) $target['paper_width'];
             $target['cut'] = (bool) $target['cut'];
             $target['feed_lines'] = (int) ($data['feed_lines'] ?? 2);
+            $target['text_size'] = $data['text_size'] ?? 'normal';
             try { app(\App\Services\Lottery\PrintAuthorization::class)->publicKey(); }
             catch (\RuntimeException $e) { abort(503, $e->getMessage()); }
         }
@@ -760,7 +778,7 @@ class LotteryController extends Controller
             if ($previous) {
                 abort_unless($previous->user_id === $r->user()->id, 409);
                 abort_unless(($previous->payload['document_type'] ?? 'sale') === $documentType, 409);
-                foreach ($target as $key => $value) abort_unless(($previous->payload[$key] ?? match ($key) { 'transport' => 'browser', 'feed_lines' => 2, 'test_reprint' => false, default => null }) === $value, 409, 'Este intento corresponde a otra impresora o configuración.');
+                foreach ($target as $key => $value) abort_unless(($previous->payload[$key] ?? match ($key) { 'transport' => 'browser', 'feed_lines' => 2, 'text_size' => 'normal', 'test_reprint' => false, default => null }) === $value, 409, 'Este intento corresponde a otra impresora o configuración.');
                 abort_if(! $payout && ! $continuation && app(\App\Services\Lottery\PrintPolicy::class)->denial($ticket) !== null, 422, 'El ticket ya no está habilitado para impresión.');
                 return ['audit_id' => $previous->id, 'audit_number'=>$previous->office_number, ...$previous->payload,
                     ...(! $payout && $previous->payload['status'] === 'requested' ? ['ticket_pin' => $ticket->payment_pin] : [])];

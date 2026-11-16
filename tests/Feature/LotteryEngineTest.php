@@ -1004,6 +1004,40 @@ class LotteryEngineTest extends TestCase
         $this->postJson('/lottery/settings', ['scope' => 'office', 'currency' => 'DOP', 'settings' => ['super_pale' => ['commission_bps' => 10001]]])->assertUnprocessable();
     }
 
+    public function test_copying_consortium_tickets_is_optional_inherited_and_exposes_only_wagers(): void
+    {
+        $ticket = $this->sell();
+        $other = BranchOffice::create(['office_id' => $this->office->id, 'name' => 'Otra banca', 'code' => 'COPY', 'is_active' => true]);
+        $otherTicket = $this->sell();
+        $otherTicket->update(['branch_office_id' => $other->id]);
+        $this->actingAs($this->seller);
+        $this->getJson('/lottery/copy-ticket/'.$ticket->reference)->assertOk()->assertJsonCount(1, 'lines');
+        $url = '/lottery/copy-ticket/'.$otherTicket->reference;
+        $this->getJson($url)->assertNotFound();
+        $settings = $this->office->lottery_settings;
+        $settings['copy_consortium_tickets'] = true;
+        $this->office->update(['lottery_settings' => $settings]);
+        $response = $this->getJson($url)->assertOk()->assertJsonPath('source_branch', 'COPY')->assertJsonPath('lines.0.numbers', '10');
+        $this->assertSame(['reference', 'source_branch', 'lines'], array_keys($response->json()));
+        $this->assertSame(['draw_id', 'second_draw_id', 'modality', 'numbers', 'amount_minor'], array_keys($response->json('lines.0')));
+        $this->getJson('/lottery/tickets/'.$otherTicket->reference)->assertNotFound();
+        $this->branch->update(['lottery_settings' => ['copy_consortium_tickets' => false]]);
+        $this->getJson($url)->assertNotFound();
+        $settings['copy_consortium_tickets'] = false;
+        $this->office->update(['lottery_settings' => $settings]);
+        $this->branch->update(['lottery_settings' => ['copy_consortium_tickets' => true]]);
+        $this->getJson('/lottery/copy-ticket/'.$otherTicket->code)->assertOk();
+        $foreign = Office::create(['name' => 'Consorcio ajeno', 'currency' => 'DOP', 'is_active' => true]);
+        $otherTicket->update(['office_id' => $foreign->id]);
+        $this->getJson('/lottery/copy-ticket/'.$otherTicket->code)->assertNotFound();
+        $this->branch->update(['lottery_settings' => []]);
+        $this->postJson('/lottery/settings', ['scope' => 'branch', 'branch_id' => $this->branch->id, 'currency' => 'DOP', 'settings' => ['copy_consortium_tickets' => true]])->assertRedirect();
+        $this->assertTrue($this->branch->fresh()->lottery_settings['copy_consortium_tickets']);
+        $this->seller->roles()->detach();
+        $this->seller->unsetRelation('roles');
+        $this->getJson('/lottery/copy-ticket/'.$ticket->reference)->assertForbidden();
+    }
+
     public function test_general_tariffs_respect_draw_exceptions_and_independent_bank_values(): void
     {
         $settings = $this->office->lottery_settings;
@@ -1713,7 +1747,7 @@ class LotteryEngineTest extends TestCase
             $ticket = $this->sell();
             $ticket->update(['payment_pin' => '000042']);
             $request = ['attempt_key' => (string) Str::uuid(), 'trigger' => 'automatic', 'transport' => 'local',
-                'device_id' => (string) Str::uuid(), 'printer' => 'Térmica USB', 'profile' => 'epson', 'paper_width' => 80, 'cut' => true, 'feed_lines' => 0];
+                'device_id' => (string) Str::uuid(), 'printer' => 'Térmica USB', 'profile' => 'epson', 'paper_width' => 80, 'cut' => true, 'feed_lines' => 0, 'text_size' => 'large'];
             $url = '/lottery/tickets/'.$ticket->code.'/print';
             $this->actingAs($this->seller);
             $response = $this->postJson($url, $request)->assertOk();
@@ -1727,6 +1761,7 @@ class LotteryEngineTest extends TestCase
             $this->assertSame($this->branch->name, $data['receipt']['branch_name']);
             $this->assertSame($request['device_id'], $data['target']['device_id']);
             $this->assertSame(0, $data['target']['feed_lines']);
+            $this->assertSame('large', $data['target']['text_size']);
             $this->assertSame($ticket->lines()->first()->draw_id, $data['receipt']['lines'][0]['draw_id']);
             $this->assertSame('A', $data['receipt']['lines'][0]['draw']);
             $this->assertLessThanOrEqual(120, $data['expires_at'] - $data['issued_at']);
@@ -1734,6 +1769,8 @@ class LotteryEngineTest extends TestCase
             $this->postJson($url, $request)->assertOk()->assertJsonPath('sequence', 1);
             $this->postJson($url, [...$request, 'printer' => 'Otra impresora'])->assertStatus(409);
             $this->postJson($url, [...$request, 'feed_lines' => 3])->assertStatus(409);
+            $this->postJson($url, [...$request, 'text_size' => 'small'])->assertStatus(409);
+            $this->postJson($url, [...$request, 'text_size' => 'huge'])->assertUnprocessable()->assertJsonValidationErrors('text_size');
             foreach ([-1, 16, 1.5] as $invalidFeed) $this->postJson($url, [...$request, 'feed_lines' => $invalidFeed])->assertUnprocessable()->assertJsonValidationErrors('feed_lines');
             $this->postJson('/lottery/tickets/'.$ticket->code.'/print-status', ['attempt_key' => $request['attempt_key'], 'status' => 'submitted', 'spool_job_id' => 42])->assertOk();
             $this->postJson('/lottery/tickets/'.$ticket->code.'/print-status', ['attempt_key' => $request['attempt_key'], 'status' => 'failed'])->assertOk();

@@ -13,9 +13,22 @@ export async function renderReceipt(job) {
   if (![58, 80].includes(target.paper_width) || !['epson', 'star'].includes(target.profile)) throw new Error('Perfil de impresión inválido.');
   const feedLines = target.feed_lines ?? 2;
   if (!Number.isInteger(feedLines) || feedLines < 0 || feedLines > 15) throw new Error('Espacio final inválido.');
-  const p = new ThermalPrinter({ type: target.profile === 'star' ? PrinterTypes.STAR : PrinterTypes.EPSON, width: target.paper_width === 58 ? 32 : 48, characterSet: CharacterSet.PC850_MULTILINGUAL, breakLine: BreakLine.WORD, removeSpecialCharacters: false });
+  const textSize = target.text_size ?? 'normal';
+  if (!['small', 'normal', 'large'].includes(textSize)) throw new Error('Tamaño de texto inválido.');
+  const columns = textSize === 'small' ? (target.paper_width === 58 ? 42 : 64) : (target.paper_width === 58 ? 32 : 48);
+  const p = new ThermalPrinter({ type: target.profile === 'star' ? PrinterTypes.STAR : PrinterTypes.EPSON, width: columns, characterSet: CharacterSet.PC850_MULTILINGUAL, breakLine: BreakLine.WORD, removeSpecialCharacters: false });
+  p.setTextNormal();
+  if (textSize === 'small') p.setTypeFontB();
+  else p.setTypeFontA();
+  if (textSize === 'large') p.setTextDoubleHeight();
   p.alignCenter(); p.bold(true);
-  if (r.company_name) { p.setTextDoubleHeight(); p.println(text(r.company_name)); p.setTextNormal(); }
+  if (r.company_name) {
+    p.setTextDoubleHeight();
+    if (textSize === 'small') p.setTypeFontB();
+    p.println(text(r.company_name));
+    if (textSize !== 'large') p.setTextNormal();
+  }
+  if (textSize === 'small') p.setTypeFontB();
   p.println(`Banca: ${text(r.branch_name || r.branch)}`); p.bold(false); p.println(text(r.date));
   if (r.test_reprint) { p.bold(true); p.println('PRUEBA - SIN VALIDEZ'); p.bold(false); }
   if (r.status === 'cancelled') { p.bold(true); p.println('TICKET ANULADO'); p.bold(false); }

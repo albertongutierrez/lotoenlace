@@ -53,21 +53,37 @@ async function enterPlay(user: ReturnType<typeof userEvent.setup>, numbers: stri
 const duplicateQr = '514011a0-42cb-42f5-b074-331a834bb98e';
 function mockDuplicateTicket() {
     vi.mocked(axios.get).mockImplementation(async (url) => {
-        if (String(url).startsWith('/lottery/tickets/')) return { data: {
+        if (String(url).startsWith('/lottery/copy-ticket/')) return { data: {
             code: duplicateQr, reference: 'T-000012',
             lines: [{ draw_id: 1, second_draw_id: null, modality: 'quiniela', numbers: '07', amount_minor: 250 }],
         } };
         return { data: { current: { id: 1 } } };
     });
 }
-async function openDuplicate(showQr = false) {
-    const user = await mount({}, { show_qr: showQr });
+async function openDuplicate(showQr = false, copyConsortium = false) {
+    const user = await mount({}, { show_qr: showQr, copy_consortium_tickets: copyConsortium });
     await screen.findByText('Caja abierta');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await user.click(screen.getByRole('button', { name: 'Duplicar F4' }));
     await screen.findByLabelText('Número del ticket');
     return user;
 }
+
+test('Duplicar puede consultar el consorcio y muestra la banca de origen antes de cargar', async () => {
+    vi.mocked(axios.get).mockImplementation(async url => String(url).startsWith('/lottery/copy-ticket/') ? { data: {
+        reference: 'T-000012', source_branch: 'OTRA',
+        lines: [{ draw_id: 1, second_draw_id: null, modality: 'quiniela', numbers: '07', amount_minor: 250 }],
+    } } : { data: { current: { id: 1 } } });
+    const user = await openDuplicate(false, true);
+    expect(screen.getByText('Usa el número impreso en el ticket de cualquier banca de este consorcio, con o sin T-.')).toBeTruthy();
+    await user.type(screen.getByLabelText('Número del ticket'), '12');
+    await user.keyboard('{Enter}');
+    await screen.findByText('Ticket T-000012 · Banca OTRA · 1 jugada encontrada');
+    expect(draftLines()).toEqual([]);
+    await user.click(screen.getByRole('button', { name: 'Cargar jugadas' }));
+    await screen.findByText('Ticket cargado. Al vender se comprobarán las reglas actuales.');
+    expect(draftLines()[0].numbers).toBe('07');
+});
 
 test.each(['12', 'T-000012', '#12'])('Duplicar por número %s consulta en la banca actual y carga solo al confirmar', async reference => {
     mockDuplicateTicket();
@@ -78,7 +94,7 @@ test.each(['12', 'T-000012', '#12'])('Duplicar por número %s consulta en la ban
     await user.type(screen.getByLabelText('Número del ticket'), reference);
     await user.keyboard('{Enter}');
     await screen.findByText('Ticket T-000012 · 1 jugada encontrada');
-    expect(axios.get).toHaveBeenCalledWith(`/lottery/tickets/T-${reference === 'T-000012' ? '000012' : '12'}`, expect.objectContaining({ params: { branch_id: 1 } }));
+    expect(axios.get).toHaveBeenCalledWith(`/lottery/copy-ticket/T-${reference === 'T-000012' ? '000012' : '12'}`, expect.objectContaining({ params: { branch_id: 1 } }));
     expect(draftLines()).toEqual([]);
     await user.click(screen.getByRole('button', { name: 'Cargar jugadas' }));
     await screen.findByText('Ticket cargado. Al vender se comprobarán las reglas actuales.');
@@ -97,7 +113,7 @@ test('Duplicar consulta automáticamente el QR completo y Enter carga sus jugada
     await waitFor(() => expect(document.activeElement).toBe(field));
     await user.paste(duplicateQr);
     await screen.findByText('Ticket T-000012 · 1 jugada encontrada');
-    expect(axios.get).toHaveBeenCalledWith(`/lottery/tickets/${duplicateQr}`, expect.objectContaining({ params: { branch_id: 1 } }));
+    expect(axios.get).toHaveBeenCalledWith(`/lottery/copy-ticket/${duplicateQr}`, expect.objectContaining({ params: { branch_id: 1 } }));
     fireEvent.keyDown(field, { key: 'Enter', repeat: true });
     expect(draftLines()).toEqual([]);
     expect(screen.getByRole('button', { name: 'Cargar jugadas' })).toBeTruthy();
@@ -105,25 +121,25 @@ test('Duplicar consulta automáticamente el QR completo y Enter carga sus jugada
     await user.keyboard('{Enter}');
     await waitFor(() => expect(draftLines()).toHaveLength(1));
     expect(draftLines()[0]).toMatchObject({ numbers: '07', amount: '2.50' });
-    expect(vi.mocked(axios.get).mock.calls.filter(([url]) => String(url).startsWith('/lottery/tickets/'))).toHaveLength(1);
+    expect(vi.mocked(axios.get).mock.calls.filter(([url]) => String(url).startsWith('/lottery/copy-ticket/'))).toHaveLength(1);
     expect(axios.post).not.toHaveBeenCalled();
 });
 
 test('Duplicar QR con Enter final del lector hace una sola consulta y espera un nuevo Enter para cargar', async () => {
     let resolveTicket!: (value: any) => void;
     const response = new Promise(resolve => { resolveTicket = resolve; });
-    vi.mocked(axios.get).mockImplementation(async url => String(url).startsWith('/lottery/tickets/') ? response as any : { data: { current: { id: 1 } } });
+    vi.mocked(axios.get).mockImplementation(async url => String(url).startsWith('/lottery/copy-ticket/') ? response as any : { data: { current: { id: 1 } } });
     const user = await openDuplicate(true);
     await user.click(screen.getByRole('button', { name: 'Código QR', exact: true }));
     await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText('Código QR del ticket')));
     fireEvent.change(screen.getByLabelText('Código QR del ticket'), { target: { value: duplicateQr } });
     await user.keyboard('{Enter}');
-    await waitFor(() => expect(vi.mocked(axios.get).mock.calls.filter(([url]) => String(url).startsWith('/lottery/tickets/'))).toHaveLength(1));
+    await waitFor(() => expect(vi.mocked(axios.get).mock.calls.filter(([url]) => String(url).startsWith('/lottery/copy-ticket/'))).toHaveLength(1));
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 220)); });
     await act(async () => { resolveTicket({ data: { reference: 'T-000012', lines: [{ draw_id: 1, modality: 'quiniela', numbers: '07', amount_minor: 250 }] } }); });
     await screen.findByRole('button', { name: 'Cargar jugadas' });
     expect(draftLines()).toHaveLength(0);
-    expect(vi.mocked(axios.get).mock.calls.filter(([url]) => String(url).startsWith('/lottery/tickets/'))).toHaveLength(1);
+    expect(vi.mocked(axios.get).mock.calls.filter(([url]) => String(url).startsWith('/lottery/copy-ticket/'))).toHaveLength(1);
     await user.keyboard('{Enter}');
     await waitFor(() => expect(draftLines()).toHaveLength(1));
 });
@@ -134,7 +150,7 @@ test('Duplicar valida el número, limpia la consulta al cambiar de método y per
     await user.type(screen.getByLabelText('Número del ticket'), 'abc');
     await user.keyboard('{Enter}');
     await screen.findByText(/Escribe un número de ticket válido/);
-    expect(vi.mocked(axios.get).mock.calls.filter(([url]) => String(url).startsWith('/lottery/tickets/'))).toHaveLength(0);
+    expect(vi.mocked(axios.get).mock.calls.filter(([url]) => String(url).startsWith('/lottery/copy-ticket/'))).toHaveLength(0);
     await user.clear(screen.getByLabelText('Número del ticket'));
     await user.type(screen.getByLabelText('Número del ticket'), '12');
     await user.keyboard('{Enter}');

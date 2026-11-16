@@ -30,7 +30,6 @@ export default function IssuedTicketModal({ ticket, draws, branch, currency, onC
     const [uncertain, setUncertain] = useState(false);
     const [configure, setConfigure] = useState(false);
     const [preference, setPreference] = useState(() => printerPreference(branch.id));
-    const printMode = preference.mode;
     const receipt = useMemo(() => ticketReceiptHtml(ticket, draws, branch, currency, preference), [ticket, draws, branch.code, branch.name, branch.office?.name, currency, preference]);
     const print = async (trigger: "automatic" | "manual" = "manual") => {
         if (printing.current || sent.current) return;
@@ -38,62 +37,36 @@ export default function IssuedTicketModal({ ticket, draws, branch, currency, onC
         setPrintBusy(true); setStatus(""); setError(''); setUncertain(false); setProgress('Preparando impresión…');
         try {
             const local = localPrintTarget(branch.id);
-            const target = JSON.stringify(local?.target ?? { transport: 'browser' });
+            if (local.target.text_size !== 'normal') {
+                const health = await agentRequest('/health', local.connection.token);
+                if (!health.capabilities?.text_sizes?.includes(local.target.text_size)) throw new LocalPrinterError('Actualiza el agente de esta PC para imprimir con el tamaño de texto seleccionado.');
+            }
+            const target = JSON.stringify(local.target);
             if (pendingTarget.current !== target) pendingAttempt.current = null;
             pendingTarget.current = target;
             pendingAttempt.current ??= requestId();
-            const { data } = await axios.post(`/lottery/tickets/${encodeURIComponent(ticket.code)}/print`, { branch_id: branch.id, attempt_key: pendingAttempt.current, trigger, ...(local?.target ?? {}), ...((payout || continuation) ? {document_type: ticket.document_type, payment_id: ticket.payment_id} : {}) });
-            if (local) {
-                setProgress(`Enviando a ${local.preference.printer}…`);
-                const attemptKey = pendingAttempt.current;
-                let result;
-                try {
-                    result = await agentRequest('/jobs', local.connection.token, { authorization: data.authorization });
-                } catch (e) {
-                    const unknown = e instanceof LocalPrinterError && e.state === 'unknown';
-                    setUncertain(unknown);
-                    await axios.post(`/lottery/tickets/${encodeURIComponent(ticket.code)}/print-status`, { branch_id: branch.id, attempt_key: attemptKey, status: unknown ? 'unknown' : 'failed' }).catch(() => {});
-                    throw e;
-                }
-                if (result.status !== 'submitted') throw new LocalPrinterError('No se pudo confirmar el envío a la impresora.', 'unknown');
-                sent.current = true;
-                const confirmation: PrintConfirmation = { mode: 'local', at: new Date().toLocaleTimeString('es-DO', { timeZone: 'America/Santo_Domingo' }), spoolId: result.spool_job_id };
-                setSentInfo(confirmation);
-                setStatus(`Enviado a ${local.preference.printer}.`);
-                pendingAttempt.current = null;
-                let auditSaved = true;
-                await axios.post(`/lottery/tickets/${encodeURIComponent(ticket.code)}/print-status`, { branch_id: branch.id, attempt_key: attemptKey, status: 'submitted', spool_job_id: result.spool_job_id }, { timeout: 10000 }).catch(() => { auditSaved = false; });
-                setStatus(`Enviado a ${local.preference.printer}.${auditSaved ? '' : ' El envío quedó registrado en el agente; no se pudo actualizar su estado en el sistema.'}`);
-                setError('');
-                onPrinted?.(confirmation);
-                return;
+            const { data } = await axios.post(`/lottery/tickets/${encodeURIComponent(ticket.code)}/print`, { branch_id: branch.id, attempt_key: pendingAttempt.current, trigger, ...local.target, ...((payout || continuation) ? {document_type: ticket.document_type, payment_id: ticket.payment_id} : {}) });
+            setProgress(`Enviando a ${local.preference.printer}…`);
+            const attemptKey = pendingAttempt.current;
+            let result;
+            try {
+                result = await agentRequest('/jobs', local.connection.token, { authorization: data.authorization });
+            } catch (e) {
+                const unknown = e instanceof LocalPrinterError && e.state === 'unknown';
+                setUncertain(unknown);
+                await axios.post(`/lottery/tickets/${encodeURIComponent(ticket.code)}/print-status`, { branch_id: branch.id, attempt_key: attemptKey, status: unknown ? 'unknown' : 'failed' }).catch(() => {});
+                throw e;
             }
-            pendingAttempt.current = null;
-            if (!payout && !/^[0-9]{6}$/.test(data.ticket_pin ?? "")) throw new Error("No se recibió el PIN de impresión.");
-            const doc = frame.current?.contentDocument;
-            if (doc) {
-                if (data.continuation_ticket) {
-                    doc.open(); doc.write(ticketReceiptHtml(data.continuation_ticket, draws, branch, currency, printerPreference(branch.id))); doc.close();
-                }
-                const pinLabel = doc.getElementById("ticket-pin");
-                if (!payout && !pinLabel) throw new Error("No se encontró el PIN en el comprobante.");
-                if (!payout && pinLabel) pinLabel.textContent = `PIN de cobro: ${data.ticket_pin}`;
-                const testLabel = doc.getElementById('ticket-test');
-                if (testLabel) testLabel.textContent = data.test_reprint ? `PRUEBA - SIN VALIDEZ${data.ticket_status === 'cancelled' ? ' · TICKET ANULADO' : ''}` : '';
-                const stamp = doc.getElementById("print-audit");
-                if (!stamp) throw new Error("No se encontró el control de impresión.");
-                stamp.textContent = `${data.kind === "original" ? "ORIGINAL" : "REIMPRESIÓN"} · Copia ${data.sequence} · Control ${data.audit_number ?? data.audit_id}`;
-            }
-            if (!frame.current?.contentWindow) throw new Error();
-            const printWindow = frame.current.contentWindow;
-            setProgress('Abriendo el diálogo de impresión…');
-            printWindow.focus();
-            printWindow.print();
+            if (result.status !== 'submitted') throw new LocalPrinterError('No se pudo confirmar el envío a la impresora.', 'unknown');
             sent.current = true;
-            const confirmation: PrintConfirmation = { mode: 'browser', at: new Date().toLocaleTimeString('es-DO', { timeZone: 'America/Santo_Domingo' }) };
+            const confirmation: PrintConfirmation = { mode: 'local', at: new Date().toLocaleTimeString('es-DO', { timeZone: 'America/Santo_Domingo' }), spoolId: result.spool_job_id };
             setSentInfo(confirmation);
-            setStatus('Se abrió el diálogo del navegador. El navegador no informa si imprimiste o cancelaste.');
-            setError("");
+            setStatus(`Enviado a ${local.preference.printer}.`);
+            pendingAttempt.current = null;
+            let auditSaved = true;
+            await axios.post(`/lottery/tickets/${encodeURIComponent(ticket.code)}/print-status`, { branch_id: branch.id, attempt_key: attemptKey, status: 'submitted', spool_job_id: result.spool_job_id }, { timeout: 10000 }).catch(() => { auditSaved = false; });
+            setStatus(`Enviado a ${local.preference.printer}.${auditSaved ? '' : ' El envío quedó registrado en el agente; no se pudo actualizar su estado en el sistema.'}`);
+            setError('');
             onPrinted?.(confirmation);
         } catch (e: any) {
             setError(e.response?.data?.reason ?? e.response?.data?.message ?? e.message ?? "No se pudo abrir la impresión. Usa Imprimir para reintentar.");
@@ -113,7 +86,7 @@ export default function IssuedTicketModal({ ticket, draws, branch, currency, onC
             {!payout && !continuation && <p className="text-sm text-slate-500">Cobrado por {ticketPaymentMethodName(ticket)}{ticket.payment_reference ? ` · ${ticket.payment_reference}` : ''}</p>}
             {(ticket.payment_method ?? 'cash') === 'cash' && ticket.received_minor != null && <div className="grid grid-cols-2 gap-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100"><p>Recibido<br /><strong>{money(ticket.received_minor, ticket.currency ?? currency)}</strong></p><p>Devolución<br /><strong>{money(ticket.change_minor, ticket.currency ?? currency)}</strong></p></div>}
             <p className="break-all rounded-lg bg-slate-100 p-3 font-mono text-sm dark:bg-slate-800">{ticket.reference ?? ticket.code}</p>
-            <p className="text-sm text-slate-500">{printMode === 'local' ? 'Impresión directa con el agente de esta PC. El envío a la cola no confirma la salida física del papel.' : 'Se abre automáticamente el diálogo de impresión. Cerrar o cancelar la impresión no anula la venta.'}</p>
+            <p className="text-sm text-slate-500">Impresión directa con el agente de esta PC. El envío a la cola no confirma la salida física del papel.</p>
             <div role="status" aria-live="polite" aria-atomic="true">
                 {previousPrints.map(({label, confirmation}) => <p key={label} className="mb-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"><Check className="mr-2 inline h-4 w-4" />{label}: {confirmation.mode === 'local' ? 'enviado a imprimir' : 'impresión solicitada al navegador'} · {confirmation.at}{confirmation.spoolId ? ` · Trabajo #${confirmation.spoolId}` : ''}</p>)}
                 {printBusy && !sentInfo && <div className="flex items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sky-800 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200"><LoaderCircle className="h-6 w-6 shrink-0 animate-spin" /><div><p className="font-semibold">{progress}</p><p className="mt-1 text-xs">Espera la confirmación del envío. El botón está bloqueado para evitar otra copia.</p></div></div>}

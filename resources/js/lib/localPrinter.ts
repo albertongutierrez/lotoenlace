@@ -2,11 +2,11 @@ const baseUrl = 'http://127.0.0.1:18745';
 const connectionKey = 'lotoenlace:print-agent:connection';
 const preferenceKey = (branchId: number) => `lotoenlace:printer:${branchId}`;
 export type LocalPrinter = { name: string; driver: string; isDefault: boolean; offline: boolean; virtual: boolean };
-export type PrinterPreference = { mode: 'browser' | 'local'; printer: string; profile: 'epson' | 'star'; paper_width: 58 | 80; cut: boolean; feed_lines?: number };
+export type PrinterPreference = { mode: 'browser' | 'local'; printer: string; profile: 'epson' | 'star'; paper_width: 58 | 80; cut: boolean; feed_lines?: number; text_size?: 'small' | 'normal' | 'large' };
 export type AgentConnection = { token: string; deviceId: string };
-export const defaultPreference: PrinterPreference = { mode: 'browser', printer: '', profile: 'epson', paper_width: 80, cut: true, feed_lines: 2 };
+export const defaultPreference: PrinterPreference = { mode: 'local', printer: '', profile: 'epson', paper_width: 80, cut: true, feed_lines: 2, text_size: 'normal' };
 export function printerPreference(branchId: number): PrinterPreference {
-    try { const value = JSON.parse(localStorage.getItem(preferenceKey(branchId)) ?? 'null'); if (value?.mode === 'local' || value?.mode === 'browser') return { ...defaultPreference, ...value, feed_lines: Number.isInteger(value.feed_lines) && value.feed_lines >= 0 && value.feed_lines <= 15 ? value.feed_lines : 2 }; } catch { /* Storage may be unavailable. */ }
+    try { const value = JSON.parse(localStorage.getItem(preferenceKey(branchId)) ?? 'null'); if (value?.mode === 'local' || value?.mode === 'browser') return { ...defaultPreference, ...value, mode: 'local', text_size: ['small', 'normal', 'large'].includes(value.text_size) ? value.text_size : 'normal', feed_lines: Number.isInteger(value.feed_lines) && value.feed_lines >= 0 && value.feed_lines <= 15 ? value.feed_lines : 2 }; } catch { /* Storage may be unavailable. */ }
     return { ...defaultPreference };
 }
 export function agentConnection(): AgentConnection | null {
@@ -30,8 +30,7 @@ export async function agentRequest(path: '/printers' | '/health' | '/jobs', toke
 }
 export function localPrintTarget(branchId: number) {
     const preference = printerPreference(branchId);
-    if (preference.mode !== 'local') return null;
     const connection = agentConnection();
     if (!connection?.token || !connection.deviceId || !preference.printer) throw new LocalPrinterError('Configura la impresora de esta PC antes de imprimir.');
-    return { preference, connection, target: { transport: 'local' as const, device_id: connection.deviceId, printer: preference.printer, profile: preference.profile, paper_width: preference.paper_width, cut: preference.cut, feed_lines: preference.feed_lines ?? 2 } };
+    return { preference, connection, target: { transport: 'local' as const, device_id: connection.deviceId, printer: preference.printer, profile: preference.profile, paper_width: preference.paper_width, cut: preference.cut, feed_lines: preference.feed_lines ?? 2, text_size: preference.text_size ?? 'normal' } };
 }

@@ -29,6 +29,7 @@ foreach (['catalog' => 'catalog', 'catalog.*' => 'catalog', 'settings' => 'setti
 }
 
 $routes['lottery.cash-status'] = 'lottery.sell';
+$routes['lottery.copy-ticket'] = 'lottery.sell';
 $routes['lottery.published-results'] = 'lottery.results.view';
 $routes['lottery.cash'] = 'lottery.cash';
 $routes['lottery.cash.*'] = 'lottery.cash';

@@ -35,7 +35,7 @@ class PrintAuthorization
             'version' => 1, 'id' => $p['attempt_key'], 'issuer' => rtrim(config('app.url'), '/'),
             'issued_at' => now()->timestamp, 'expires_at' => $expires,
             'audit_id' => $event->id, 'audit_number' => $event->office_number,
-            'target' => array_intersect_key($p, array_flip(['device_id', 'printer', 'profile', 'paper_width', 'cut', 'feed_lines'])),
+            'target' => array_intersect_key($p, array_flip(['device_id', 'printer', 'profile', 'paper_width', 'cut', 'feed_lines', 'text_size'])),
             'receipt' => [
                 'reference' => $ticket->reference, 'code' => $ticket->code, 'pin' => $ticket->payment_pin,
                 'test_reprint' => (bool) ($p['test_reprint'] ?? false), 'status' => $ticket->status,
@@ -66,7 +66,7 @@ class PrintAuthorization
             'version' => 1, 'id' => $p['attempt_key'], 'issuer' => rtrim(config('app.url'), '/'),
             'issued_at' => now()->timestamp, 'expires_at' => now()->addMinutes(2)->timestamp,
             'audit_id' => $event->id, 'audit_number' => $event->office_number,
-            'target' => array_intersect_key($p, array_flip(['device_id', 'printer', 'profile', 'paper_width', 'cut', 'feed_lines'])),
+            'target' => array_intersect_key($p, array_flip(['device_id', 'printer', 'profile', 'paper_width', 'cut', 'feed_lines', 'text_size'])),
             'receipt' => [...app(PayoutReceipt::class)->make($ticket, $payment), 'test_reprint' => (bool) ($p['test_reprint'] ?? false), 'kind' => $p['kind'], 'sequence' => $p['sequence']],
         ]);
     }
@@ -78,7 +78,7 @@ class PrintAuthorization
             'version' => 1, 'id' => $p['attempt_key'], 'issuer' => rtrim(config('app.url'), '/'),
             'issued_at' => now()->timestamp, 'expires_at' => now()->addMinutes(2)->timestamp,
             'audit_id' => $event->id, 'audit_number' => $event->office_number,
-            'target' => array_intersect_key($p, array_flip(['device_id', 'printer', 'profile', 'paper_width', 'cut', 'feed_lines'])),
+            'target' => array_intersect_key($p, array_flip(['device_id', 'printer', 'profile', 'paper_width', 'cut', 'feed_lines', 'text_size'])),
             'receipt' => [...app(ContinuationTicket::class)->make($ticket, $payment, true), 'test_reprint' => (bool) ($p['test_reprint'] ?? false), 'kind' => $p['kind'], 'sequence' => $p['sequence']],
         ]);
     }
