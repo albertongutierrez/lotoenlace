@@ -702,7 +702,7 @@ function SalesWorkspace({
         setDrafts(remaining); setDiscardDraft(false); loadDraft(remaining[0]);
     };
     return (
-        <Shell title={`Ventas · ${branch.code}`} fullWidth compact fixedViewport contentClassName="!pt-1">
+        <Shell title={`Ventas · ${branch.code}`} fullWidth compact fixedViewport contentClassName="!pt-2">
             <div role="group" aria-label="Tickets y herramientas" className="flex shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900 [&>button]:inline-flex [&>button]:h-7 [&>button]:items-center [&>button]:justify-center [&>button]:px-2 [&>button]:py-1 [&>button]:text-xs [&>button]:leading-4">
                 <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto" role="tablist" aria-label="Tickets en trabajo">
                     {drafts.map(draft => { const active = draft.id === activeDraftId; const count = active ? lines.length : draft.lines.length; return <button key={draft.id} role="tab" aria-selected={active} disabled={workspaceBusy} onClick={() => switchDraft(draft.id)} className={`flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-xs ${active ? "border-emerald-600 bg-emerald-700 text-white" : "border-slate-300 dark:border-slate-600"}`}>{active ? <Tickets className="h-4 w-4" /> : <Pause className="h-4 w-4" />}{draft.title} · {count} jugadas{!active && " · En espera"}</button>; })}
