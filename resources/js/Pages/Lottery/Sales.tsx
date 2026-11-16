@@ -1127,7 +1127,8 @@ function SalesWorkspace({
                 ))}
             </div>
             </div>
-            <div aria-hidden="true" className="shrink-0" style={{ height: footerHeight }} />
+            {/* Reserve the fixed toolbar with a 12px gap, accounting for the wrapper's bottom padding. */}
+            <div aria-hidden="true" className="-mb-3 shrink-0 sm:-mb-4" style={{ height: footerHeight }} />
             <section
                 ref={footerRef}
                 aria-label="Acciones de venta"
