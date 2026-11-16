@@ -63,11 +63,12 @@ export function Shell({
     compact = false,
     fixedViewport = false,
     showNavbar = false,
+    contentClassName,
     children,
-}: PropsWithChildren<{ title: string; fullWidth?: boolean; compact?: boolean; fixedViewport?: boolean; showNavbar?: boolean }>) {
+}: PropsWithChildren<{ title: string; fullWidth?: boolean; compact?: boolean; fixedViewport?: boolean; showNavbar?: boolean; contentClassName?: string }>) {
     const { auth } = usePage<PageProps>().props;
     return (
-        <AuthenticatedLayout user={auth.user} header={title} fixedViewport={fixedViewport} showNavbar={showNavbar}>
+        <AuthenticatedLayout user={auth.user} header={title} fixedViewport={fixedViewport} showNavbar={showNavbar} contentClassName={contentClassName}>
             <Head title={title} />
             <div className={`w-full ${fixedViewport ? "flex h-full min-h-0 flex-col gap-3 overflow-hidden" : compact ? "space-y-3" : "space-y-6"} ${fullWidth ? "" : "mx-auto max-w-7xl"}`}>
                 {!fixedViewport && <div>

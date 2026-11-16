@@ -702,10 +702,10 @@ function SalesWorkspace({
         setDrafts(remaining); setDiscardDraft(false); loadDraft(remaining[0]);
     };
     return (
-        <Shell title={`Ventas · ${branch.code}`} fullWidth compact fixedViewport>
-            <div className="flex shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900">
+        <Shell title={`Ventas · ${branch.code}`} fullWidth compact fixedViewport contentClassName="!pt-1">
+            <div role="group" aria-label="Tickets y herramientas" className="flex shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900 [&>button]:inline-flex [&>button]:h-7 [&>button]:items-center [&>button]:justify-center [&>button]:px-2 [&>button]:py-1 [&>button]:text-xs [&>button]:leading-4">
                 <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto" role="tablist" aria-label="Tickets en trabajo">
-                    {drafts.map(draft => { const active = draft.id === activeDraftId; const count = active ? lines.length : draft.lines.length; return <button key={draft.id} role="tab" aria-selected={active} disabled={workspaceBusy} onClick={() => switchDraft(draft.id)} className={`flex shrink-0 items-center gap-2 rounded-md border px-3 py-2 text-xs ${active ? "border-emerald-600 bg-emerald-700 text-white" : "border-slate-300 dark:border-slate-600"}`}>{active ? <Tickets className="h-4 w-4" /> : <Pause className="h-4 w-4" />}{draft.title} · {count} jugadas{!active && " · En espera"}</button>; })}
+                    {drafts.map(draft => { const active = draft.id === activeDraftId; const count = active ? lines.length : draft.lines.length; return <button key={draft.id} role="tab" aria-selected={active} disabled={workspaceBusy} onClick={() => switchDraft(draft.id)} className={`flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-xs ${active ? "border-emerald-600 bg-emerald-700 text-white" : "border-slate-300 dark:border-slate-600"}`}>{active ? <Tickets className="h-4 w-4" /> : <Pause className="h-4 w-4" />}{draft.title} · {count} jugadas{!active && " · En espera"}</button>; })}
                 </div>
                 {cashRequired && <>
                     {cashOpen ? <Link href="/lottery/cash" className="shrink-0 rounded border border-emerald-500 px-2 py-1 text-xs text-emerald-600 dark:text-emerald-400">Caja abierta</Link> : <button type="button" onClick={() => void cashStatus.refetch()} className="shrink-0 rounded border border-amber-500 px-2 py-1 text-xs text-amber-600 dark:text-amber-400">{cashStatus.isLoading ? "Consultando forma de cuadre…" : cashStatus.isError ? "Reintentar consulta" : "Abrir caja"}</button>}
@@ -941,10 +941,7 @@ function SalesWorkspace({
                         </div>
                         <button type="button" aria-pressed={selectedOnly} onClick={() => setSelectedOnly(value => !value)} className={`flex w-full items-center justify-center gap-2 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors ${selectedOnly ? "border-emerald-600 bg-emerald-700 text-white" : "border-slate-300 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"}`}><ListChecks className="h-4 w-4" />Solo seleccionados</button>
                     </>}
-                    {superPale && <div className="space-y-1 text-xs">
-                        <div className="flex items-start gap-2"><p role="status" className="min-w-0 flex-1 text-slate-600 dark:text-slate-400">{pairStart === null ? 'Elige dos sorteos para añadir una pareja.' : `Combinar ${nameForDraw(pairStart)} con…`}</p>{pairStart !== null && <button type="button" aria-label="Cancelar pareja en preparación" title="Cancelar pareja en preparación" className="shrink-0 rounded text-slate-500 hover:text-red-500" disabled={busy} onClick={() => { setPairStart(null); setPairError(''); }}><X size={14} /></button>}</div>
-                        {pairError && <p role="alert" className="text-amber-700 dark:text-amber-400">{pairError}</p>}
-                    </div>}
+                    {superPale && pairError && <p role="alert" className="text-xs text-amber-700 dark:text-amber-400">{pairError}</p>}
                 </div>
                 <div tabIndex={0} aria-label="Sorteos disponibles" className={`grid min-h-0 flex-[3_1_0%] auto-rows-max content-start gap-1.5 overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin] [scrollbar-color:#94a3b8_#f1f5f9] dark:[scrollbar-color:#475569_#0f172a] ${superPale ? 'grid-cols-2' : 'grid-cols-1'}`}>
                     {draws
@@ -976,7 +973,6 @@ function SalesWorkspace({
                                         <span className="min-w-0 break-words text-xs font-semibold leading-4">{nameForDraw(d.id)}</span>
                                     </span>
                                     {d.timezone && d.timezone !== 'America/Santo_Domingo' && <span className="block pl-6 text-[10px] text-emerald-700 dark:text-emerald-400">Sorteo {new Date(getWindow(d).result).toLocaleTimeString('es-DO', {timeZone: 'America/Santo_Domingo', hour:'2-digit', minute:'2-digit'})} RD</span>}
-                                    {superPale && pairStart === d.id && <span className="mt-1 block pl-6 text-xs font-semibold text-emerald-700 dark:text-emerald-400">Primer sorteo · elige el segundo</span>}
                                     <span className={`mt-1 block pl-6 text-xs tabular-nums ${seconds < 300 ? "font-semibold text-red-600 dark:text-red-400" : "text-slate-600 dark:text-slate-400"}`}>
                                         Cierra en{" "}
                                         {Math.floor(seconds / 3600)

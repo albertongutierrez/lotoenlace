@@ -32,12 +32,14 @@ export default function AuthenticatedLayout({
     header,
     fixedViewport = false,
     showNavbar = false,
+    contentClassName = '',
 }: PropsWithChildren<{
     user: User;
     activeBranchOffice?: BranchOfficeSummary | null;
     header?: ReactNode;
     fixedViewport?: boolean;
     showNavbar?: boolean;
+    contentClassName?: string;
 }>) {
     const { props, url } = usePage<PageProps>();
 
@@ -298,7 +300,7 @@ export default function AuthenticatedLayout({
                 </header>
 
                 {fixedViewport && <div className="fixed inset-y-0 left-0 z-20 flex w-14 flex-col items-center border-r border-slate-200 bg-white py-4 dark:border-slate-800 dark:bg-slate-900"><button title="Abrir menú" aria-label="Abrir menú" aria-expanded={open} onClick={() => setOpen(value => !value)} className="rounded-lg border border-slate-300 p-2 dark:border-slate-700"><Menu className="h-5 w-5" /></button></div>}
-                <main className={fixedViewport ? "relative min-h-0 min-w-0 flex-1 overflow-hidden p-3 sm:p-4" : "relative min-w-0 p-4 sm:p-8"}>{children}<NavigationLoading /></main>
+                <main className={`${fixedViewport ? "relative min-h-0 min-w-0 flex-1 overflow-hidden p-3 sm:p-4" : "relative min-w-0 p-4 sm:p-8"} ${contentClassName}`}>{children}<NavigationLoading /></main>
             </div>
         </div>
     );

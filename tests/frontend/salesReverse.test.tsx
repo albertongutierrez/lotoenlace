@@ -98,6 +98,7 @@ test('Súper palé admite un sorteo en varias parejas, impide duplicados y permi
     const draw = (id: number) => screen.getByRole('button', { name: new RegExp(`^Sorteo ${id}`) });
     await user.click(draw(1));
     expect(draw(1).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.queryByText(/Primer sorteo · elige el segundo|Combinar Sorteo/)).toBeNull();
     await user.click(draw(2));
     expect(draw(1).getAttribute('aria-pressed')).toBe('false');
     expect(draw(2).getAttribute('aria-pressed')).toBe('false');
@@ -109,7 +110,7 @@ test('Súper palé admite un sorteo en varias parejas, impide duplicados y permi
     expect(within(block).getAllByRole('listitem')).toHaveLength(2);
     await choosePair(user, 2, 3);
     expect(screen.getByText('Esta pareja no está habilitada para súper palé. Elige otro sorteo.')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Cancelar pareja en preparación' }));
+    await user.click(draw(2));
     await user.click(screen.getByRole('button', { name: 'Quitar pareja Sorteo 1 + Sorteo 2' }));
     await enterPlay(user, '1020.');
     await waitFor(() => expect(draftLines()).toHaveLength(2));
