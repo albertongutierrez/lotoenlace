@@ -5,15 +5,16 @@ import { PrinterPreference } from './localPrinter';
 
 const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!));
 
-export function ticketReceiptHtml(ticket: any, draws: { id: number; name: string }[], branch: { code: string; name?: string; office?: { name: string } }, currency: string, preference: PrinterPreference) {
+export function ticketReceiptHtml(ticket: any, draws: { id: number; name: string; abbreviation?: string | null }[], branch: { code: string; name?: string; office?: { name: string } }, currency: string, preference: PrinterPreference) {
     const payout = ticket.document_type === 'payout';
     const continuation = ticket.document_type === 'continuation';
     const cash = (value: number) => escapeHtml(`${(ticket.currency ?? currency) === 'DOP' ? 'RD$' : (ticket.currency ?? currency) + ' '}${(value / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
     const company = ticket.print_settings?.company_name ?? branch.office?.name ?? '';
     const branchName = ticket.print_settings?.branch_name ?? branch.name ?? branch.code;
     const paymentLabel = !payout && !continuation ? `<p>Cobro: ${escapeHtml(ticketPaymentMethodName(ticket))}</p>` : '';
-    const name = (id: number) => draws.find(draw => draw.id === id)?.name ?? String(id);
-    const groups = groupReceiptLines((ticket.lines ?? []).map((line: any) => ({ ...line, draw: typeof line.draw === 'string' ? line.draw : (line.draw?.name ?? name(line.draw_id)) + (line.second_draw_id ? ' + ' + (line.second_draw?.name ?? name(line.second_draw_id)) : '') })));
+    const abbreviated = ticket.print_settings?.abbreviate_draw_names ?? ticket.settings_snapshot?.abbreviate_draw_names ?? false;
+    const name = (id: number, record?: {name: string; abbreviation?: string | null}) => { const draw = record ?? draws.find(draw => draw.id === id); return draw ? (abbreviated && draw.abbreviation?.trim() ? draw.abbreviation : draw.name) : String(id); };
+    const groups = groupReceiptLines((ticket.lines ?? []).map((line: any) => ({ ...line, draw: typeof line.draw === 'string' ? line.draw : name(line.draw_id, line.draw) + (line.second_draw_id ? ' + ' + name(line.second_draw_id, line.second_draw) : '') })));
     const rows = groups.map(group => {
         let modality = '';
         return group.draws.map(draw => `<div class="draw">${escapeHtml(draw.name)}</div>`).join('') + '<table><tbody>' + group.lines.map(line => {

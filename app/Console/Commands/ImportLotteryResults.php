@@ -57,10 +57,15 @@ class ImportLotteryResults extends Command
     private function importResults(BoletoganadorImporter $parser, Configuration $config, ResultService $service): int
     {
         $now = $config->clock();
-        $draws = Draw::where('active', true)->whereNotNull('source_key')->get()->filter(function ($d) use ($config, $now) {
-            $window = $config->window($d, $now);
-
-            return $window && $now->gte($window['closes_at']);
+        $draws = Draw::where('active', true)->whereNotNull('source_key')->get()->flatMap(function ($draw) use ($config, $now) {
+            $local = $now->setTimezone($draw->timezone ?? 'America/Santo_Domingo');
+            $dates = [$local];
+            $yesterday = $local->subDay();
+            if (TicketLine::forDrawDate($draw->id, $yesterday->toDateString())->whereNull('prize_minor')->whereHas('ticket', fn ($q) => $q->where('status', 'sold'))->exists()) $dates[] = $yesterday;
+            return collect($dates)->filter(function ($date) use ($config, $draw, $now) {
+                $window = $config->window($draw, $date);
+                return $window && $now->gte($window['closes_at']);
+            })->map(fn ($date) => ['draw' => $draw, 'date' => $date])->values();
         });
         if ($draws->isEmpty()) {
             $this->summary='No hay sorteos vinculados pendientes de consulta.';
@@ -68,7 +73,7 @@ class ImportLotteryResults extends Command
 
             return self::SUCCESS;
         }
-        $this->stats['checked_draws']=$draws->count();
+        $this->stats['checked_draws']=$draws->pluck('draw.id')->unique()->count();
         // Fixed public host, redirects disabled: administrator-entered URLs cannot target internal services.
         try {
             $response = Http::connectTimeout(8)->timeout(15)
@@ -88,36 +93,39 @@ class ImportLotteryResults extends Command
         }
         $this->stats['source_checked']=true;
         $failures = 0;
-        foreach ($draws as $draw) {
+        foreach ($draws as $check) {
+            $draw = $check['draw'];
+            $resultDay = $check['date'];
+            $date = $resultDay->toDateString();
             try {
-                $numbers = $parser->parse($response->body(), $draw->source_key, $now, $draw->result_count);
+                $numbers = $parser->parse($response->body(), $draw->source_key, $resultDay, $draw->result_count, $date === $now->setTimezone($draw->timezone ?? 'America/Santo_Domingo')->toDateString());
                 if (! $numbers && $draw->source_key === 'resultados-el-quemaito-mayor') {
                     $detail = Http::connectTimeout(8)->timeout(15)->withOptions(['allow_redirects' => false])
                         ->get('https://elboletoganador.com/loteria/resultados-el-quemaito-mayor');
                     $detail->throw();
-                    $numbers = $parser->parseDetail($detail->body(), $draw->source_key, $now, $draw->result_count);
+                    $numbers = $parser->parseDetail($detail->body(), $draw->source_key, $resultDay, $draw->result_count);
                 }
                 if (! $numbers) {
                     continue;
                 }
-                $existing = DrawResult::where('draw_id', $draw->id)->where('business_date', $now->toDateString())->first();
+                $existing = DrawResult::where('draw_id', $draw->id)->where('business_date', $date)->first();
                 if ($existing) {
                     if ($existing->numbers !== $numbers) {
                         $this->stats['conflicts']++;
-                        LotteryAudit::create(['action' => 'result.source_conflict', 'payload' => ['draw_id' => $draw->id, 'date' => $now->toDateString(), 'stored' => $existing->numbers, 'source' => $numbers]]);
+                        LotteryAudit::create(['action' => 'result.source_conflict', 'payload' => ['draw_id' => $draw->id, 'date' => $date, 'stored' => $existing->numbers, 'source' => $numbers]]);
                         continue;
                     }
                     if ($existing->status === 'confirmed') {
-                        $repaired=$service->reconcilePublished($draw->id,$now->toDateString());
+                        $repaired=$service->reconcilePublished($draw->id,$date);
                         $this->stats['repaired_lines']+=$repaired['lines'];
                         $this->ticketIds=array_merge($this->ticketIds,$repaired['ticket_ids']);
                         continue;
                     }
                 }
-                $service->record(['draw_id' => $draw->id, 'business_date' => $now->toDateString(), 'numbers' => $numbers, 'confirmed' => true,
+                $service->record(['draw_id' => $draw->id, 'business_date' => $date, 'numbers' => $numbers, 'confirmed' => true,
                     'source_url' => 'https://elboletoganador.com/loteria/'.basename($draw->source_key), 'evidence' => json_encode(['fetched_at' => $now->toIso8601String(), 'numbers' => $numbers, 'source_key' => $draw->source_key])]);
                 $this->stats['published_results']++;
-                $ids=TicketLine::where(fn($q)=>$q->where('draw_id',$draw->id)->orWhere('second_draw_id',$draw->id))->whereHas('ticket',fn($q)=>$q->where('business_date',$now->toDateString())->where('status','sold'))->pluck('ticket_id')->all();
+                $ids=TicketLine::forDrawDate($draw->id,$date)->whereHas('ticket',fn($q)=>$q->where('status','sold'))->pluck('ticket_id')->all();
                 $this->ticketIds=array_merge($this->ticketIds,$ids);
                 $this->info('Importado y confirmado: '.$draw->name);
             } catch (\Throwable $e) {

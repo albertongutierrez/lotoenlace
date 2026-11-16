@@ -87,6 +87,81 @@ class LotteryEngineTest extends TestCase
         }
     }
 
+    public function test_draw_timezones_convert_seasonal_hours_and_use_local_days_and_exceptions(): void
+    {
+        $config = app(Configuration::class);
+        foreach (['America/New_York', 'America/Port-au-Prince'] as $timezone) {
+            $this->a->update(['timezone' => $timezone, 'closes_at' => '21:00:00', 'draws_at' => '21:05:00']);
+            foreach (['2026-01-15' => '22:00', '2026-07-15' => '21:00'] as $date => $expected) {
+                $window = $config->window($this->a, CarbonImmutable::parse($date.' 21:30', 'America/Santo_Domingo'));
+                $this->assertSame($expected, $window['closes_at']->setTimezone('America/Santo_Domingo')->format('H:i'));
+                $this->assertSame($expected === '22:00', $window['open']);
+            }
+        }
+        $this->a->update(['timezone' => 'America/New_York', 'weekdays' => [1], 'closes_at' => '23:30:00']);
+        $at = CarbonImmutable::parse('2026-11-17 00:15', 'America/Santo_Domingo');
+        $this->assertSame('2026-11-16', $config->window($this->a, $at)['business_date']);
+        $this->a->update(['exceptions' => ['2026-11-16' => ['closed' => true]]]);
+        $this->assertNull($config->window($this->a, $at));
+    }
+
+    public function test_mixed_timezone_super_pale_matches_each_draw_date_across_midnight(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-11-17 00:15', 'America/Santo_Domingo'));
+        $this->a->update(['timezone' => 'America/New_York', 'opens_at' => '00:00:00', 'closes_at' => '23:30:00']);
+        $this->b->update(['opens_at' => '00:00:00', 'closes_at' => '01:00:00']);
+        $ticket = $this->sell([$this->line(super: true)]);
+        $line = $ticket->lines()->first();
+        $this->assertSame('2026-11-17', $ticket->business_date);
+        $this->assertSame('2026-11-16', $line->draw_date);
+        $this->assertSame('2026-11-17', $line->second_draw_date);
+        $this->assertSame('2026-11-17 04:30:00', $line->closes_at->utc()->format('Y-m-d H:i:s'));
+        $this->travelTo(CarbonImmutable::parse('2026-11-17 00:35', 'America/Santo_Domingo'));
+        $service = app(ResultService::class);
+        $service->record(['draw_id' => $this->a->id, 'business_date' => '2026-11-16', 'numbers' => ['10', '33', '44'], 'confirmed' => true]);
+        $this->assertNull($line->fresh()->prize_minor);
+        $this->travelTo(CarbonImmutable::parse('2026-11-17 01:05', 'America/Santo_Domingo'));
+        $service->record(['draw_id' => $this->b->id, 'business_date' => '2026-11-17', 'numbers' => ['20', '55', '66'], 'confirmed' => true]);
+        $this->assertSame(3000000, $line->fresh()->prize_minor);
+        $line->refresh()->update(['prize_minor' => null]);
+        $this->assertSame(1, $service->reconcilePublished($this->a->id, '2026-11-16')['lines']);
+        $service->remove(DrawResult::where('draw_id', $this->a->id)->firstOrFail());
+        $this->assertNull($line->fresh()->prize_minor);
+    }
+
+    public function test_automatic_import_respects_timezone_close_and_previous_local_date(): void
+    {
+        config(['cache.default' => 'array']);
+        $this->a->update(['timezone' => 'America/New_York', 'opens_at' => '00:00:00', 'closes_at' => '23:30:00', 'source_key' => 'resultados-a']);
+        $this->travelTo(CarbonImmutable::parse('2026-11-17 00:15', 'America/Santo_Domingo'));
+        $ticket = $this->sell();
+        $html = '<article class="inicio-tarjeta-hoy"><a href="/loteria/resultados-a">A</a><span class="tile-date">Lun, 16 nov</span><div class="tile-ball">10</div><div class="tile-ball">20</div><div class="tile-ball">30</div></article>';
+        \Illuminate\Support\Facades\Http::fake(['elboletoganador.com/*' => \Illuminate\Support\Facades\Http::response($html)]);
+        $status = \Illuminate\Support\Facades\Artisan::call('lottery:import-results');
+        $this->assertSame(0, $status, \Illuminate\Support\Facades\Artisan::output());
+        $this->assertDatabaseMissing('draw_results', ['draw_id' => $this->a->id, 'business_date' => '2026-11-16']);
+        $this->travelTo(CarbonImmutable::parse('2026-11-17 01:15', 'America/Santo_Domingo'));
+        $this->artisan('lottery:import-results')->assertSuccessful();
+        $this->assertDatabaseHas('draw_results', ['draw_id' => $this->a->id, 'business_date' => '2026-11-16', 'status' => 'confirmed']);
+        $this->assertSame(60000, $ticket->lines()->first()->prize_minor);
+    }
+
+    public function test_abbreviated_draw_names_inherit_with_independent_branch_overrides(): void
+    {
+        $config = app(Configuration::class);
+        $this->assertFalse($config->effective($this->branch)['abbreviate_draw_names']);
+        $this->office->update(['lottery_settings' => [...$this->office->lottery_settings, 'abbreviate_draw_names' => true]]);
+        $this->assertTrue($config->effective($this->branch->fresh())['abbreviate_draw_names']);
+        $this->actingAs($this->seller)->postJson('/lottery/settings', ['scope' => 'branch', 'branch_id' => $this->branch->id, 'currency' => 'DOP', 'settings' => ['abbreviate_draw_names' => false]])->assertRedirect();
+        $this->assertFalse($config->effective($this->branch->fresh())['abbreviate_draw_names']);
+        $this->postJson('/lottery/settings', ['scope' => 'branch', 'branch_id' => $this->branch->id, 'currency' => 'DOP', 'settings' => []])->assertRedirect();
+        $this->assertTrue($config->effective($this->branch->fresh())['abbreviate_draw_names']);
+        $this->a->update(['abbreviation' => 'ABR']);
+        $this->assertSame('ABR', $this->a->displayName(true));
+        $this->assertSame('A', $this->a->displayName(false));
+        $this->assertSame('B', $this->b->displayName(true));
+    }
+
     public function test_dashboard_scopes_metrics_to_the_active_bank_and_selected_business_dates(): void
     {
         $winner = $this->sell([$this->line('10'), [...$this->line('1'), 'draw_id' => $this->b->id, 'numbers' => '20']]);
@@ -1415,13 +1490,15 @@ class LotteryEngineTest extends TestCase
         $this->get('/lottery/catalog/lotteries/'.$other->id)->assertOk();
         $this->postJson('/lottery/catalog/lotteries', ['id' => $other->id, 'name' => 'Nombre editado', 'active' => false])
             ->assertOk()->assertJsonPath('lottery.name', 'Nombre editado')->assertJsonPath('lottery.active', false);
-        $this->postJson('/lottery/catalog/draws', ['lottery_id' => $other->id, 'name' => 'Nuevo sorteo',
+        $this->postJson('/lottery/catalog/draws', ['lottery_id' => $other->id, 'name' => 'Nuevo sorteo', 'abbreviation' => 'NS', 'timezone' => 'America/New_York',
             'opens_at' => '06:00', 'closes_at' => '14:00', 'draws_at' => '14:05', 'weekdays' => [1, 2],
             'modalities' => ['quiniela', 'super_pale'], 'active' => true, 'result_count' => 3,
             'source_url' => 'https://elboletoganador.com/loteria/prueba', 'exceptions' => ['2026-12-25' => ['closed' => true]]])
             ->assertOk()->assertJsonPath('message', 'Sorteo guardado.');
         $this->getJson('/lottery/catalog/lotteries/'.$other->id)->assertOk()->assertJsonCount(1, 'draws')
-            ->assertJsonPath('draws.0.source_key', 'prueba')->assertJsonPath('draws.0.exceptions.2026-12-25.closed', true);
+            ->assertJsonPath('draws.0.source_key', 'prueba')->assertJsonPath('draws.0.exceptions.2026-12-25.closed', true)
+            ->assertJsonPath('draws.0.abbreviation', 'NS')->assertJsonPath('draws.0.timezone', 'America/New_York');
+        $this->postJson('/lottery/catalog/draws', ['lottery_id' => $other->id, 'name' => 'Inválido', 'timezone' => 'UTC-5', 'opens_at' => '06:00', 'closes_at' => '14:00', 'draws_at' => '14:05', 'weekdays' => [1], 'modalities' => ['quiniela'], 'active' => true])->assertUnprocessable()->assertJsonValidationErrors('timezone');
         $this->postJson('/lottery/catalog/lotteries', ['name' => '', 'active' => true])->assertUnprocessable()->assertJsonValidationErrors('name');
     }
 
@@ -1744,6 +1821,8 @@ class LotteryEngineTest extends TestCase
         config(['printing.private_key_path' => $directory.'/private.pem']);
         $this->artisan('lottery:print-agent-key')->assertExitCode(0);
         try {
+            $this->a->update(['abbreviation' => 'ABR']);
+            $this->office->update(['lottery_settings' => [...$this->office->lottery_settings, 'abbreviate_draw_names' => true]]);
             $ticket = $this->sell();
             $ticket->update(['payment_pin' => '000042']);
             $request = ['attempt_key' => (string) Str::uuid(), 'trigger' => 'automatic', 'transport' => 'local',
@@ -1763,7 +1842,7 @@ class LotteryEngineTest extends TestCase
             $this->assertSame(0, $data['target']['feed_lines']);
             $this->assertSame('large', $data['target']['text_size']);
             $this->assertSame($ticket->lines()->first()->draw_id, $data['receipt']['lines'][0]['draw_id']);
-            $this->assertSame('A', $data['receipt']['lines'][0]['draw']);
+            $this->assertSame('ABR', $data['receipt']['lines'][0]['draw']);
             $this->assertLessThanOrEqual(120, $data['expires_at'] - $data['issued_at']);
             $this->assertStringNotContainsString('000042', \App\Models\LotteryAudit::all()->toJson());
             $this->postJson($url, $request)->assertOk()->assertJsonPath('sequence', 1);

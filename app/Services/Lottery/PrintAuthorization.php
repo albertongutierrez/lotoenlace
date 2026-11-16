@@ -25,7 +25,8 @@ class PrintAuthorization
             return $this->issueContinuation($ticket, $payment, $event);
         }
         if ($payment = $continuations->latestPayment($ticket)) return $this->issueContinuation($ticket, $payment, $event);
-        $ticket->loadMissing(['lines.draw:id,name', 'lines.secondDraw:id,name']);
+        $ticket->loadMissing(['lines.draw:id,name,abbreviation', 'lines.secondDraw:id,name,abbreviation']);
+        $abbreviated = (bool) app(Configuration::class)->effective($bank)['abbreviate_draw_names'];
         $p = $event->payload;
         $expires = now()->addMinutes(2)->timestamp;
         if (! app(PrintPolicy::class)->isTestOffice($ticket->office_id)) {
@@ -44,7 +45,7 @@ class PrintAuthorization
                 'date' => $ticket->created_at->copy()->timezone('America/Santo_Domingo')->format('d/m/Y h:i:s A'),
                 'lines' => $ticket->lines->map(fn ($line) => [
                     'draw_id' => $line->draw_id, 'second_draw_id' => $line->second_draw_id,
-                    'draw' => $line->draw->name.($line->secondDraw ? ' + '.$line->secondDraw->name : ''),
+                    'draw' => $line->draw->displayName($abbreviated).($line->secondDraw ? ' + '.$line->secondDraw->displayName($abbreviated) : ''),
                     'modality' => $line->modality, 'numbers' => $line->numbers, 'amount_minor' => $line->amount_minor,
                 ])->values()->all(),
                 'gross_minor' => $ticket->gross_minor, 'discount_minor' => $ticket->discount_minor,

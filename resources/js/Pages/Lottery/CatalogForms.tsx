@@ -6,6 +6,7 @@ import axios from "axios";
 import Modal from "@/Components/Modal";
 import { notify } from "@/lib/notify";
 import { Field, Draw, input, button, secondary, modes } from "./shared";
+import { drawLocalDate, drawTime, systemTimezone } from '@/lib/drawSchedule';
 
 export type LotteryRow = { id: number; name: string; active: boolean; draws_count?: number };
 export function Status({ active }: { active: boolean }) {
@@ -41,17 +42,20 @@ export function LotteryEditor({ lottery, onClose }: { lottery?: LotteryRow; onCl
         </form>
     </Modal>;
 }
-export function DrawEditor({ lottery, draw, onClose }: { lottery: LotteryRow; draw?: Draw; onClose: () => void }) {
-    const [form, setForm] = useState<any>(draw ? { ...draw, lottery_id: lottery.id, opens_at: draw.opens_at.slice(0, 5), closes_at: draw.closes_at.slice(0, 5), draws_at: draw.draws_at.slice(0, 5) } : {
-        lottery_id: lottery.id, name: "", opens_at: "06:00", closes_at: "12:00", draws_at: "12:05",
+export function DrawEditor({ lottery, draw, timezones = [], onClose }: { lottery: LotteryRow; draw?: Draw; timezones?: string[]; onClose: () => void }) {
+    const [form, setForm] = useState<any>(draw ? { ...draw, abbreviation: draw.abbreviation ?? '', timezone: draw.timezone ?? systemTimezone, lottery_id: lottery.id, opens_at: draw.opens_at.slice(0, 5), closes_at: draw.closes_at.slice(0, 5), draws_at: draw.draws_at.slice(0, 5) } : {
+        lottery_id: lottery.id, name: "", abbreviation: '', timezone: systemTimezone, opens_at: "06:00", closes_at: "12:00", draws_at: "12:05",
         weekdays: [0, 1, 2, 3, 4, 5, 6], modalities: ["quiniela", "pale", "tripleta"], active: true,
         source_url: "", source_key: "", result_count: 3, exceptions: {},
     });
     const [exceptionDate, setExceptionDate] = useState("");
+    const preferred: Record<string, string> = { [systemTimezone]: 'República Dominicana · Santo Domingo', 'America/New_York': 'Estados Unidos · Nueva York', 'America/Port-au-Prince': 'Haití · Puerto Príncipe', 'America/Chicago': 'Estados Unidos · Chicago', 'America/Los_Angeles': 'Estados Unidos · Los Ángeles' };
+    const zoneOptions = [...new Set([...Object.keys(preferred), ...timezones, form.timezone])];
+    const rdTime = (value: string) => value ? new Date(drawTime(drawLocalDate(new Date(), form.timezone), value, form.timezone)).toLocaleString('es-DO', { timeZone: systemTimezone, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
     const save = useCatalogSave("/lottery/catalog/draws", onClose);
     return <Modal show onClose={onClose} closeable={!save.isPending}>
         <form className="flex max-h-[85dvh] flex-col" onSubmit={e => { e.preventDefault(); save.mutate(form); }}>
-            <div className="border-b border-slate-200 p-6 dark:border-slate-700"><Dialog.Title className="text-xl font-semibold">{draw ? "Editar sorteo" : "Nuevo sorteo"}</Dialog.Title><p className="mt-1 text-sm text-slate-500">{lottery.name} · Horarios de República Dominicana (UTC−4)</p></div>
+            <div className="border-b border-slate-200 p-6 dark:border-slate-700"><Dialog.Title className="text-xl font-semibold">{draw ? "Editar sorteo" : "Nuevo sorteo"}</Dialog.Title><p className="mt-1 text-sm text-slate-500">{lottery.name} · Horarios locales del sorteo</p></div>
             <div className="space-y-5 overflow-y-auto p-6">
                 <Errors error={save.error} />
                         <div className="grid gap-4 sm:grid-cols-2">
@@ -68,14 +72,17 @@ export function DrawEditor({ lottery, draw, onClose }: { lottery: LotteryRow; dr
                                     }
                                 />
                             </Field>
+                            <Field label="Abreviatura"><input className={input} maxLength={40} value={form.abbreviation} placeholder="Ej. ANG 6PM" onChange={e => setForm({ ...form, abbreviation: e.target.value })} /></Field>
                         </div>
+                        <Field label="Zona horaria del sorteo"><ComboboxSelect className={input} value={form.timezone} onChange={e => setForm({ ...form, timezone: e.target.value })}>{zoneOptions.map(zone => <option key={zone} value={zone}>{preferred[zone] ? `${preferred[zone]} · ` : ''}{zone}</option>)}</ComboboxSelect></Field>
+                        <p className="text-xs text-slate-500">Introduce las horas y días de la zona seleccionada. En ventas se usan los cierres equivalentes en RD. Si no hay abreviatura, se muestra el nombre completo.</p>
                         <div className="grid gap-4 sm:grid-cols-3">
                             {[
                                 ["opens_at", "Abre ventas"],
                                 ["closes_at", "Cierra ventas"],
                                 ["draws_at", "Hora del sorteo"],
                             ].map(([k, label]) => (
-                                <Field key={k} label={`${label} · hora RD`}>
+                                <Field key={k} label={`${label} · hora local`}>
                                     <input
                                         className={input}
                                         type="time"
@@ -91,6 +98,7 @@ export function DrawEditor({ lottery, draw, onClose }: { lottery: LotteryRow; dr
                                 </Field>
                             ))}
                         </div>
+                        <p className="rounded-md bg-slate-100 p-2 text-xs dark:bg-slate-800">Equivalencia en RD para hoy: abre {rdTime(form.opens_at)} · cierra {rdTime(form.closes_at)} · sorteo {rdTime(form.draws_at)}. Se recalcula según la fecha.</p>
                         <div className="flex flex-wrap gap-4">
                             {[
                                 "Dom",

@@ -46,7 +46,7 @@ class BoletoganadorImporter
         return null;
     }
 
-    public function parse(string $html, string $key, CarbonImmutable $date, int $resultCount = 3): ?array
+    public function parse(string $html, string $key, CarbonImmutable $date, int $resultCount = 3, bool $strictDate = true): ?array
     {
         $doc = new DOMDocument;
         $previous = libxml_use_internal_errors(true);
@@ -72,6 +72,7 @@ class BoletoganadorImporter
             $months = [1 => 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
             $expected = $date->day.' '.$months[$date->month];
             if (! $dateNode || ! preg_match('/(?:^|\s)'.preg_quote($expected, '/').'$/u', trim($dateNode->textContent))) {
+                if (! $strictDate) return null;
                 throw new RuntimeException('La fecha visible no coincide con hoy.');
             }
             $numbers = [];

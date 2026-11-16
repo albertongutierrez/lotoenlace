@@ -11,7 +11,7 @@ class Configuration
 {
     public const PAYMENT_METHODS = ['cash'=>'Efectivo', 'transfer'=>'Transferencia', 'card'=>'Tarjeta', 'deposit'=>'Depósito'];
     public const DEFAULTS = ['payment_methods' => ['cash'], 'payment_method_labels' => [], 'payment_reference_required' => [], 'reconciliation_mode' => 'cash', 'daily_limit_minor' => null, 'consortium_limit_minor' => null, 'cancel_minutes' => 5,
-        'reprint_minutes' => 15, 'show_qr' => false, 'copy_consortium_tickets' => false, 'discount_enabled' => false, 'discount_every_minor' => 1000,
+        'reprint_minutes' => 15, 'show_qr' => false, 'abbreviate_draw_names' => false, 'copy_consortium_tickets' => false, 'discount_enabled' => false, 'discount_every_minor' => 1000,
         'discount_amount_minor' => 100, 'footer' => '', 'draw_ids' => [], 'general_rules' => [], 'rules' => [], 'pairs' => [], 'super_pale' => []];
 
     public function effective(BranchOffice $branch): array
@@ -91,7 +91,7 @@ class Configuration
 
     public function window(Draw $draw, ?CarbonImmutable $now = null): ?array
     {
-        $now ??= $this->clock();
+        $now = ($now ?? $this->clock())->setTimezone($draw->timezone ?? 'America/Santo_Domingo');
         $exception = ($draw->exceptions ?? [])[$now->toDateString()] ?? [];
         if (! $draw->active || ($exception['closed'] ?? false) || ! in_array($now->dayOfWeek, $draw->weekdays, true)) {
             return null;
@@ -100,7 +100,13 @@ class Configuration
         $close = $now->setTimeFromTimeString($exception['closes_at'] ?? $draw->closes_at);
 
         // Same-day sessions only; reject overnight schedules in configuration.
-        return ['opens_at' => $open, 'closes_at' => $close, 'open' => $now->gte($open) && $now->lt($close)];
+        return ['business_date' => $now->toDateString(), 'opens_at' => $open, 'closes_at' => $close, 'open' => $now->gte($open) && $now->lt($close)];
+    }
+
+    public function closingForDate(Draw $draw, string $date): CarbonImmutable
+    {
+        $close = ($draw->exceptions ?? [])[$date]['closes_at'] ?? $draw->closes_at;
+        return CarbonImmutable::parse($date.' '.$close, $draw->timezone ?? 'America/Santo_Domingo');
     }
 
     public function prepare(BranchOffice $branch, array $input): array
@@ -123,6 +129,7 @@ class Configuration
         }
         $ids = array_values(array_filter([$first, $second]));
         $closing = [];
+        $dates = [];
         foreach ($ids as $id) {
             if (! in_array($id, $settings['draw_ids'])) {
                 $this->fail('Sorteo no habilitado para esta banca.');
@@ -136,6 +143,7 @@ class Configuration
                 $this->fail('Un sorteo está cerrado. Revisa las jugadas.');
             }
             $closing[] = $window['closes_at'];
+            $dates[] = $window['business_date'];
         }
         if ($second) {
             $rule = $settings['pairs']["$first-$second"] ?? [];
@@ -157,7 +165,7 @@ class Configuration
             $this->fail('El monto debe ser mayor que cero.');
         }
 
-        return ['draw_id' => $first, 'second_draw_id' => $second, 'modality' => $mode, 'numbers' => implode('-', $numbers),
+        return ['draw_id' => $first, 'second_draw_id' => $second, 'draw_date' => $dates[0], 'second_draw_date' => $dates[1] ?? null, 'modality' => $mode, 'numbers' => implode('-', $numbers),
             'amount_minor' => $amount, 'rules' => $rule, 'closes_at' => min($closing)->utc()->format('Y-m-d H:i:s')];
     }
 

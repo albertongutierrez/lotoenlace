@@ -33,11 +33,11 @@ function draftLines() {
     const saved = JSON.parse(sessionStorage.getItem(storageKey)!);
     return saved.drafts.find((draft: any) => draft.id === saved.activeId).lines;
 }
-async function mount(drawModalities: Record<number, string[]> = {}, settings: Record<string, unknown> = {}, lotteryIds: Record<number, number> = {}) {
+async function mount(drawModalities: Record<number, string[]> = {}, settings: Record<string, unknown> = {}, lotteryIds: Record<number, number> = {}, names: Record<number, {name?: string; abbreviation?: string}> = {}) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
     clients.push(client);
     const ids = [...new Set([1, 2, ...Object.keys(drawModalities).map(Number)])];
-    render(<QueryClientProvider client={client}><Sales branch={{ id: 1, office_id: 1, code: 'PRUEBA' }} currency="DOP" settings={{ draw_ids: ids, pairs: {}, discount_enabled: false, ...settings }} server_now={new Date().toISOString()} draws={ids.map(id => ({ id, name: `Sorteo ${id}`, lottery_id: lotteryIds[id] ?? 1, lottery: { name: lotteryIds[id] ? `Prueba ${lotteryIds[id]}` : 'Prueba', active: true }, active: true, opens_at: '00:00:00', closes_at: '23:59:59', weekdays: [0, 1, 2, 3, 4, 5, 6], modalities: drawModalities[id] ?? ['quiniela', 'pale', 'tripleta'] }))} /></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><Sales branch={{ id: 1, office_id: 1, code: 'PRUEBA' }} currency="DOP" settings={{ draw_ids: ids, pairs: {}, discount_enabled: false, ...settings }} server_now={new Date().toISOString()} draws={ids.map(id => ({ id, name: `Sorteo ${id}`, ...names[id], lottery_id: lotteryIds[id] ?? 1, lottery: { name: lotteryIds[id] ? `Prueba ${lotteryIds[id]}` : 'Prueba', active: true }, active: true, opens_at: '00:00:00', closes_at: '23:59:59', weekdays: [0, 1, 2, 3, 4, 5, 6], modalities: drawModalities[id] ?? ['quiniela', 'pale', 'tripleta'] }))} /></QueryClientProvider>);
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull(), { timeout: 5000 });
     return userEvent.setup();
 }
@@ -52,6 +52,18 @@ async function enterPlay(user: ReturnType<typeof userEvent.setup>, numbers: stri
 }
 
 const superModalities = ['quiniela', 'pale', 'tripleta', 'super_pale'];
+test.each([true, false])('Ventas aplica la preferencia de abreviaturas %s en sorteos, jugadas y parejas con respaldo al nombre completo', async abbreviated => {
+    const user = await mount({1:superModalities, 2:superModalities}, {abbreviate_draw_names:abbreviated, pairs:{'1-2':{enabled:true}}}, {}, {1:{abbreviation:'S1'}});
+    const firstName = abbreviated ? 'S1' : 'Sorteo 1';
+    await user.click(screen.getByRole('button', {name:new RegExp(`^${firstName}`)}));
+    await enterPlay(user,'10');
+    await waitFor(()=>expect(draftLines()).toHaveLength(1));
+    expect(within(screen.getByLabelText('Jugadas de Quiniela')).getByText(firstName)).toBeTruthy();
+    await user.keyboard('{Alt>}s{/Alt}');
+    await user.click(screen.getByRole('button', {name:new RegExp(`^${firstName}`)}));
+    await user.click(screen.getByRole('button', {name:/^Sorteo 2/}));
+    expect(within(screen.getByRole('region', {name:'Parejas de súper palé'})).getByText(`${firstName} + Sorteo 2`)).toBeTruthy();
+});
 async function choosePair(user: ReturnType<typeof userEvent.setup>, first: number, second: number) {
     for (const id of [first, second]) await user.click(screen.getByRole('button', { name: new RegExp(`^Sorteo ${id}`) }));
 }

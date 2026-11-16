@@ -12,7 +12,8 @@ class CancellationPolicy
     {
         $ids = $tickets->flatMap(fn ($ticket) => $ticket->lines->flatMap(fn ($line) => [$line->draw_id, $line->second_draw_id]))->filter()->unique();
         if ($ids->isEmpty()) return [];
-        return DrawResult::whereIn('draw_id', $ids)->whereIn('business_date', $tickets->pluck('business_date')->unique())
+        $dates = $tickets->flatMap(fn ($ticket) => $ticket->lines->flatMap(fn ($line) => [$line->draw_date ?? $ticket->business_date, $line->second_draw_date ?? $ticket->business_date]))->unique();
+        return DrawResult::whereIn('draw_id', $ids)->whereIn('business_date', $dates)
             ->get(['draw_id', 'business_date'])->mapWithKeys(fn ($result) => [$result->business_date.':'.$result->draw_id => true])->all();
     }
 
@@ -35,8 +36,8 @@ class CancellationPolicy
         if ($ticket->status !== 'sold') $reason = 'El ticket ya fue anulado.';
         elseif ($ticket->lines->contains(fn ($line) => $line->paid_at !== null)) $reason = 'El ticket tiene premios pagados.';
         elseif ($ticket->lines->contains(fn ($line) => $line->prize_minor !== null
-            || isset($published[$ticket->business_date.':'.$line->draw_id])
-            || ($line->second_draw_id && isset($published[$ticket->business_date.':'.$line->second_draw_id])))) $reason = 'Ya se publicó un resultado de este ticket.';
+            || isset($published[($line->draw_date ?? $ticket->business_date).':'.$line->draw_id])
+            || ($line->second_draw_id && isset($published[($line->second_draw_date ?? $ticket->business_date).':'.$line->second_draw_id])))) $reason = 'Ya se publicó un resultado de este ticket.';
         elseif ($ticket->lines->contains(fn ($line) => $line->closes_at && $line->closes_at->lte($now))) $reason = 'Un sorteo del ticket ya cerró.';
         elseif ($now->gte($expires)) $reason = 'Venció el plazo de cancelación.';
         return ['allowed' => $reason === null, 'reason' => $reason, 'expires_at' => $expires->toIso8601String(), 'checked_at' => $now->toIso8601String()];

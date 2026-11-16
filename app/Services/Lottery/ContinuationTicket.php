@@ -16,16 +16,17 @@ class ContinuationTicket
     public function snapshot(Ticket $ticket, BranchOffice $bank, Collection $lines): array
     {
         $qr = (bool) app(Configuration::class)->effective($bank)['show_qr'];
+        $abbreviated = (bool) app(Configuration::class)->effective($bank)['abbreviate_draw_names'];
         $gross = $lines->sum('amount_minor');
         $net = $lines->sum('net_minor');
         return [
             'branch' => $bank->code, 'branch_id' => $bank->id, 'company_name' => $bank->office->name, 'branch_name' => $bank->name ?: $bank->code,
             'currency' => $ticket->currency, 'gross_minor' => $gross, 'discount_minor' => $gross - $net, 'net_minor' => $net,
-            'show_qr' => $qr, 'print_settings' => ['show_qr' => $qr, 'company_name' => $bank->office->name, 'branch_name' => $bank->name ?: $bank->code],
+            'show_qr' => $qr, 'print_settings' => ['show_qr' => $qr, 'abbreviate_draw_names' => $abbreviated, 'company_name' => $bank->office->name, 'branch_name' => $bank->name ?: $bank->code],
             'footer' => $ticket->settings_snapshot['footer'] ?? '',
-            'lines' => $lines->load(['draw:id,name', 'secondDraw:id,name'])->map(fn ($line) => [
+            'lines' => $lines->load(['draw:id,name,abbreviation', 'secondDraw:id,name,abbreviation'])->map(fn ($line) => [
                 'ticket_line_id' => $line->id, 'draw_id' => $line->draw_id, 'second_draw_id' => $line->second_draw_id,
-                'draw' => $line->draw->name.($line->secondDraw ? ' + '.$line->secondDraw->name : ''),
+                'draw' => $line->draw->displayName($abbreviated).($line->secondDraw ? ' + '.$line->secondDraw->displayName($abbreviated) : ''),
                 'modality' => $line->modality, 'numbers' => $line->numbers, 'amount_minor' => $line->amount_minor,
             ])->values()->all(),
         ];

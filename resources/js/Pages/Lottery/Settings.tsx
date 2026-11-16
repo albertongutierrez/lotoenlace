@@ -252,11 +252,11 @@ export default function Settings({
                                 )}
                             </div>
                         ))}
-                        {["discount_enabled", "show_qr", "copy_consortium_tickets"].map((k) => (
+                        {["discount_enabled", "show_qr", "abbreviate_draw_names", "copy_consortium_tickets"].map((k) => (
                             <Field
                                 key={k}
                                 label={
-                                    k === "copy_consortium_tickets" ? "Copiar tickets de otras bancas del consorcio" : k === "show_qr"
+                                    k === "abbreviate_draw_names" ? "Usar abreviaturas de sorteos en ventas y tickets" : k === "copy_consortium_tickets" ? "Copiar tickets de otras bancas del consorcio" : k === "show_qr"
                                         ? "Mostrar QR en el ticket"
                                         : "Descuento habilitado"
                                 }

@@ -88,7 +88,7 @@ class LotteryController extends Controller
 
         abort_unless($r->user()->isSuperAdmin(), 403);
 
-        $data = ['lottery' => $lottery, 'draws' => $lottery->draws()->orderBy('draws_at')->get()];
+        $data = ['lottery' => $lottery, 'draws' => $lottery->draws()->orderBy('draws_at')->get(), 'timezones' => \DateTimeZone::listIdentifiers()];
 
 
 
@@ -123,6 +123,8 @@ class LotteryController extends Controller
         abort_unless($r->user()->isSuperAdmin(), 403);
 
         $data = $r->validate(['id' => 'nullable|integer|exists:draws,id', 'lottery_id' => 'required|exists:lotteries,id', 'name' => 'required|string|max:120',
+
+            'abbreviation' => 'nullable|string|max:40', 'timezone' => ['sometimes', 'required', Rule::in(\DateTimeZone::listIdentifiers())],
 
             'opens_at' => 'required|date_format:H:i', 'closes_at' => 'required|date_format:H:i|after:opens_at', 'draws_at' => 'required|date_format:H:i|after_or_equal:closes_at',
 
@@ -228,7 +230,7 @@ class LotteryController extends Controller
 
         $data = $r->validate(['scope' => ['required', Rule::in(['office', 'branch'])], 'currency' => ['required', Rule::in(['DOP', 'USD', 'EUR', 'HTG'])],
 
-            'settings' => 'present|array:payment_methods,payment_method_labels,payment_reference_required,reconciliation_mode,daily_limit_minor,consortium_limit_minor,cancel_minutes,reprint_minutes,show_qr,copy_consortium_tickets,discount_enabled,discount_every_minor,discount_amount_minor,footer,draw_ids,general_rules,rules,pairs,super_pale',
+            'settings' => 'present|array:payment_methods,payment_method_labels,payment_reference_required,reconciliation_mode,daily_limit_minor,consortium_limit_minor,cancel_minutes,reprint_minutes,show_qr,abbreviate_draw_names,copy_consortium_tickets,discount_enabled,discount_every_minor,discount_amount_minor,footer,draw_ids,general_rules,rules,pairs,super_pale',
 
             'settings.payment_methods' => 'nullable|array|list|min:1|max:100',
             'settings.payment_methods.*' => ['required', 'string', 'regex:/^(cash|transfer|card|deposit|custom_[a-f0-9]{12})$/D', 'distinct'],
@@ -244,6 +246,7 @@ class LotteryController extends Controller
 
             'settings.show_qr' => 'nullable|boolean', 'settings.discount_enabled' => 'nullable|boolean',
             'settings.copy_consortium_tickets' => 'nullable|boolean',
+            'settings.abbreviate_draw_names' => 'nullable|boolean',
 
             'settings.discount_every_minor' => 'nullable|integer|min:1|max:999999999', 'settings.discount_amount_minor' => 'nullable|integer|min:0|max:999999999',
 
@@ -571,7 +574,7 @@ class LotteryController extends Controller
 
 
         $ticket = $sales->sell($r->user(), $b, $data);
-        $ticket->setAttribute('print_settings', ['show_qr' => (bool) app(Configuration::class)->effective($b)['show_qr'], 'company_name' => $b->office->name, 'branch_name' => $b->name ?: $b->code]);
+        $ticket->setAttribute('print_settings', ['show_qr' => (bool) app(Configuration::class)->effective($b)['show_qr'], 'abbreviate_draw_names' => (bool) app(Configuration::class)->effective($b)['abbreviate_draw_names'], 'company_name' => $b->office->name, 'branch_name' => $b->name ?: $b->code]);
         return response()->json($ticket);
 
     }
@@ -691,7 +694,7 @@ class LotteryController extends Controller
             $reason = app(\App\Services\Lottery\PrintPolicy::class)->denial($ticket);
             abort_if($reason !== null, 422, $reason ?? '');
         }
-        $ticket->setAttribute('print_settings', ['show_qr' => (bool) app(Configuration::class)->effective($b)['show_qr'], 'company_name' => $b->office->name, 'branch_name' => $b->name ?: $b->code, 'test_reprint' => app(\App\Services\Lottery\PrintPolicy::class)->isTestOffice($b->office_id)]);
+        $ticket->setAttribute('print_settings', ['show_qr' => (bool) app(Configuration::class)->effective($b)['show_qr'], 'abbreviate_draw_names' => (bool) app(Configuration::class)->effective($b)['abbreviate_draw_names'], 'company_name' => $b->office->name, 'branch_name' => $b->name ?: $b->code, 'test_reprint' => app(\App\Services\Lottery\PrintPolicy::class)->isTestOffice($b->office_id)]);
         $ticket->setAttribute('cancellation', app(\App\Services\Lottery\CancellationPolicy::class)->state($ticket));
         return $ticket;
 
@@ -933,7 +936,7 @@ class LotteryController extends Controller
 
         abort_unless($r->user()->isSuperAdmin(), 403);
 
-        $data = $r->validate(['draw_id' => 'required|exists:draws,id', 'business_date' => 'required|date_format:Y-m-d|before_or_equal:today',
+        $data = $r->validate(['draw_id' => 'required|exists:draws,id', 'business_date' => 'required|date_format:Y-m-d',
 
             'numbers' => 'required|array|min:1|max:3', 'numbers.*' => 'required|regex:/^\d{2}$/', 'confirmed' => 'required|boolean']);
 

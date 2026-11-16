@@ -22,10 +22,10 @@ class ResultService
             // Serialize result changes and payments using the same ordered consortium locks.
             Office::orderBy('id')->lockForUpdate()->get();
             $draw = Draw::findOrFail($data['draw_id']);
-            $close = CarbonImmutable::parse($data['business_date'].' '.$draw->closes_at, 'America/Santo_Domingo');
+            $close = app(Configuration::class)->closingForDate($draw, $data['business_date']);
             abort_if($close->isFuture(), 422, 'No se pueden registrar resultados antes del cierre.');
-            $affected = TicketLine::where(fn ($q) => $q->where('draw_id', $draw->id)->orWhere('second_draw_id', $draw->id))
-                ->whereHas('ticket', fn ($q) => $q->where('business_date', $data['business_date'])->where('status', 'sold'))->get();
+            $affected = TicketLine::forDrawDate($draw->id, $data['business_date'])
+                ->whereHas('ticket', fn ($q) => $q->where('status', 'sold'))->get();
             $existing = DrawResult::where('draw_id', $draw->id)->where('business_date', $data['business_date'])->first();
             if ($existing && $existing->numbers === $data['numbers'] && $existing->status === 'confirmed' && ($data['confirmed'] ?? false)) {
                 return;
@@ -47,7 +47,7 @@ class ResultService
         return DB::transaction(function()use($drawId,$date){
             Office::orderBy('id')->lockForUpdate()->get();
             if(!DrawResult::where('draw_id',$drawId)->where('business_date',$date)->where('status','confirmed')->exists())return ['lines'=>0,'ticket_ids'=>[]];
-            $lines=TicketLine::whereNull('prize_minor')->whereNull('paid_at')->where(fn($q)=>$q->where('draw_id',$drawId)->orWhere('second_draw_id',$drawId))->whereHas('ticket',fn($q)=>$q->where('business_date',$date)->where('status','sold'))->get();
+            $lines=TicketLine::forDrawDate($drawId,$date)->whereNull('prize_minor')->whereNull('paid_at')->whereHas('ticket',fn($q)=>$q->where('status','sold'))->get();
             $ids=[];$changed=0;
             foreach($lines as $line){$prize=$this->prize($line);if($prize===null)continue;$line->update(['prize_minor'=>$prize]);$changed++;$ids[]=$line->ticket_id;}
             if($changed)LotteryAudit::create(['action'=>'result.tickets_reconciled','payload'=>['draw_id'=>$drawId,'business_date'=>$date,'lines'=>$changed,'tickets'=>count(array_unique($ids))]]);
@@ -60,8 +60,8 @@ class ResultService
         DB::transaction(function () use ($result, $user) {
             Office::orderBy('id')->lockForUpdate()->get();
             $result = DrawResult::whereKey($result->id)->lockForUpdate()->firstOrFail();
-            $affected = TicketLine::where(fn ($q) => $q->where('draw_id', $result->draw_id)->orWhere('second_draw_id', $result->draw_id))
-                ->whereHas('ticket', fn ($q) => $q->where('business_date', $result->business_date)->where('status', 'sold'))->get();
+            $affected = TicketLine::forDrawDate($result->draw_id, $result->business_date)
+                ->whereHas('ticket', fn ($q) => $q->where('status', 'sold'))->get();
             abort_if($affected->contains(fn ($line) => $line->paid_at !== null), 422, 'Hay premios pagados: no se puede eliminar este resultado.');
             $before = $result->toArray();
             $result->delete();
@@ -74,12 +74,12 @@ class ResultService
 
     public function prize(TicketLine $line): ?int
     {
-        $date = $line->ticket->business_date;
+        $date = $line->draw_date ?? $line->ticket->business_date;
         $first = DrawResult::where('draw_id', $line->draw_id)->where('business_date', $date)->where('status', 'confirmed')->first();
         if (! $first) {
             return null;
         }
-        $second = $line->second_draw_id ? DrawResult::where('draw_id', $line->second_draw_id)->where('business_date', $date)->where('status', 'confirmed')->first() : null;
+        $second = $line->second_draw_id ? DrawResult::where('draw_id', $line->second_draw_id)->where('business_date', $line->second_draw_date ?? $line->ticket->business_date)->where('status', 'confirmed')->first() : null;
         if ($line->second_draw_id && ! $second) {
             return null;
         }
@@ -149,6 +149,7 @@ class ResultService
             $lines = $ticket->lines()->where('prize_minor', '>', 0)->whereNull('paid_at')->get();
             abort_if($lines->isEmpty(), 422, 'No hay premios pendientes de pago.');
             $bank = \App\Models\BranchOffice::with('office')->findOrFail($ticket->branch_office_id);
+            $abbreviated = (bool) app(Configuration::class)->effective($bank)['abbreviate_draw_names'];
             $cash = app(CashService::class)->forOperation($bank);
             if ($cash) app(CashService::class)->record($cash, $user, 'prize', -$lines->sum('prize_minor'), 'prize:'.$ticket->id.':'.hash('sha256', $lines->sortBy('id')->pluck('id')->implode(',')), 'Pago de premios '.$ticket->code, $ticket->id);
             foreach ($lines as $line) {
@@ -169,10 +170,10 @@ class ResultService
                     'branch' => $bank->code, 'branch_id' => $bank->id, 'paid_by' => $user->name,
                     'currency' => $ticket->currency, 'net_minor' => $lines->sum('prize_minor'),
                     'gross_minor' => $lines->sum('prize_minor'), 'discount_minor' => 0,
-                    'show_qr' => false, 'print_settings' => ['show_qr' => false, 'company_name' => $bank->office->name, 'branch_name' => $bank->name ?: $bank->code],
-                    'lines' => $lines->load(['draw:id,name', 'secondDraw:id,name'])->map(fn ($line) => [
+                    'show_qr' => false, 'print_settings' => ['show_qr' => false, 'abbreviate_draw_names' => $abbreviated, 'company_name' => $bank->office->name, 'branch_name' => $bank->name ?: $bank->code],
+                    'lines' => $lines->load(['draw:id,name,abbreviation', 'secondDraw:id,name,abbreviation'])->map(fn ($line) => [
                         'ticket_line_id' => $line->id, 'draw_id' => $line->draw_id, 'second_draw_id' => $line->second_draw_id,
-                        'draw' => $line->draw->name.($line->secondDraw ? ' + '.$line->secondDraw->name : ''),
+                        'draw' => $line->draw->displayName($abbreviated).($line->secondDraw ? ' + '.$line->secondDraw->displayName($abbreviated) : ''),
                         'modality' => $line->modality, 'numbers' => $line->numbers, 'amount_minor' => $line->prize_minor,
                     ])->values()->all(),
                 ],

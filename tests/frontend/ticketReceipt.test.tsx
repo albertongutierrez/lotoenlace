@@ -3,6 +3,16 @@ import { expect, test } from 'vitest';
 import { ticketReceiptHtml } from '../../resources/js/lib/ticketReceipt';
 import { defaultPreference } from '../../resources/js/lib/localPrinter';
 
+test('las abreviaturas siguen la configuración de impresión y conservan nombres completos cuando faltan', () => {
+    const draws = [{id:1, name:'Sorteo completo A', abbreviation:'SA'}, {id:2, name:'Sorteo completo B'}];
+    const ticket = {created_at:'2026-11-16T12:00:00Z', net_minor:200, lines:draws.map(draw=>({draw_id:draw.id, modality:'quiniela', numbers:'10', amount_minor:100}))};
+    for (const abbreviated of [true, false]) {
+        const html = ticketReceiptHtml({...ticket, print_settings:{abbreviate_draw_names:abbreviated}}, draws, {code:'001'}, 'DOP', defaultPreference);
+        const doc = new DOMParser().parseFromString(html,'text/html');
+        expect([...doc.querySelectorAll('.draw')].map(node=>node.textContent)).toEqual([abbreviated?'SA':'Sorteo completo A','Sorteo completo B']);
+    }
+});
+
 test('el comprobante del navegador muestra sorteos compartidos, modalidades ordenadas y montos sin duplicar', () => {
     const draws = [{ id: 1, name: 'Nombre completo del primer sorteo' }, { id: 2, name: 'Segundo sorteo' }];
     const ticket = { reference: 'T-000001', created_at: '2026-10-21T12:00:00Z', gross_minor: 800, discount_minor: 0, net_minor: 800, lines: [1, 2].flatMap(draw_id => ['super_pale', 'tripleta', 'pale', 'quiniela'].map((modality, i) => ({ draw_id, modality, numbers: `${i + 1}0`, amount_minor: 100 }))) };

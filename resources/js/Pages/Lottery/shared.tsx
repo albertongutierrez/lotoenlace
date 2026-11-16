@@ -12,6 +12,8 @@ export const modes = {
 export type Draw = {
     id: number;
     name: string;
+    abbreviation?: string | null;
+    timezone?: string;
     lottery_id: number;
     lottery?: { name: string; active?: boolean };
     opens_at: string;
@@ -40,7 +42,8 @@ export const money = (minor: number, currency = "DOP") =>
     new Intl.NumberFormat("es-DO", { style: "currency", currency }).format(
         minor / 100,
     );
-export const drawName = (d: Draw) => `${d.lottery?.name ?? ""} · ${d.name}`;
+export const drawDisplayName = (d: Pick<Draw, 'name' | 'abbreviation'> | undefined, abbreviated = false) => d ? (abbreviated && d.abbreviation?.trim() ? d.abbreviation : d.name) : 'Sorteo no disponible';
+export const drawName = (d: Draw, abbreviated = false) => `${d.lottery?.name ?? ""} · ${drawDisplayName(d, abbreviated)}`;
 export function Field({
     label,
     children,
