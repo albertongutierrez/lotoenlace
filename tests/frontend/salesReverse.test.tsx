@@ -36,7 +36,8 @@ function draftLines() {
 async function mount(drawModalities: Record<number, string[]> = {}, settings: Record<string, unknown> = {}) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
     clients.push(client);
-    render(<QueryClientProvider client={client}><Sales branch={{ id: 1, office_id: 1, code: 'PRUEBA' }} currency="DOP" settings={{ draw_ids: [1, 2], pairs: {}, discount_enabled: false, ...settings }} server_now={new Date().toISOString()} draws={[1, 2].map(id => ({ id, name: `Sorteo ${id}`, lottery_id: 1, lottery: { name: 'Prueba', active: true }, active: true, opens_at: '00:00:00', closes_at: '23:59:59', weekdays: [0, 1, 2, 3, 4, 5, 6], modalities: drawModalities[id] ?? ['quiniela', 'pale', 'tripleta'] }))} /></QueryClientProvider>);
+    const ids = [...new Set([1, 2, ...Object.keys(drawModalities).map(Number)])];
+    render(<QueryClientProvider client={client}><Sales branch={{ id: 1, office_id: 1, code: 'PRUEBA' }} currency="DOP" settings={{ draw_ids: ids, pairs: {}, discount_enabled: false, ...settings }} server_now={new Date().toISOString()} draws={ids.map(id => ({ id, name: `Sorteo ${id}`, lottery_id: 1, lottery: { name: 'Prueba', active: true }, active: true, opens_at: '00:00:00', closes_at: '23:59:59', weekdays: [0, 1, 2, 3, 4, 5, 6], modalities: drawModalities[id] ?? ['quiniela', 'pale', 'tripleta'] }))} /></QueryClientProvider>);
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull(), { timeout: 5000 });
     return userEvent.setup();
 }
@@ -49,6 +50,104 @@ async function enterPlay(user: ReturnType<typeof userEvent.setup>, numbers: stri
     await user.type(screen.getByLabelText('Monto por sorteo / pareja'), '1');
     await user.keyboard('{Enter}');
 }
+
+const superModalities = ['quiniela', 'pale', 'tripleta', 'super_pale'];
+async function choosePair(user: ReturnType<typeof userEvent.setup>, first: number, second: number) {
+    for (const id of [first, second]) await user.click(screen.getByRole('button', { name: new RegExp(`^Sorteo ${id}`) }));
+}
+
+test('Súper palé agrega solo las tres parejas elegidas y conserva la selección regular', async () => {
+    const modalities = Object.fromEntries([1, 2, 3, 4, 5, 6].map(id => [id, superModalities]));
+    const pairs: Record<string, { enabled: boolean }> = {};
+    for (let first = 1; first <= 6; first++) for (let second = first + 1; second <= 6; second++) pairs[`${first}-${second}`] = { enabled: true };
+    const user = await mount(modalities, { pairs });
+    for (const id of [1, 3, 5]) await user.click(screen.getByRole('button', { name: new RegExp(`^Sorteo ${id}`) }));
+    await user.click(screen.getByRole('checkbox', { name: 'Súper palé' }));
+    await choosePair(user, 1, 2); await choosePair(user, 3, 4); await choosePair(user, 5, 6);
+    const block = screen.getByRole('region', { name: 'Parejas de súper palé' });
+    expect(within(block).getAllByRole('listitem')).toHaveLength(3);
+    expect(within(block).getByText('Sorteo 3 + Sorteo 4')).toBeTruthy();
+    await enterPlay(user, '1020');
+    await waitFor(() => expect(draftLines()).toHaveLength(3));
+    expect(draftLines().map((line: any) => [line.draw_id, line.second_draw_id, line.modality, line.numbers, line.amount])).toEqual([
+        [1, 2, 'super_pale', '10-20', '1'], [3, 4, 'super_pale', '10-20', '1'], [5, 6, 'super_pale', '10-20', '1'],
+    ]);
+    expect(axios.post).toHaveBeenCalledTimes(3);
+    await user.click(screen.getByRole('checkbox', { name: 'Súper palé' }));
+    expect(screen.getByText('3 sorteos seleccionados')).toBeTruthy();
+    await enterPlay(user, '07');
+    await waitFor(() => expect(draftLines()).toHaveLength(6));
+    expect(draftLines().slice(3).map((line: any) => [line.draw_id, line.modality])).toEqual([[1, 'quiniela'], [3, 'quiniela'], [5, 'quiniela']]);
+});
+
+test('Súper palé admite un sorteo en varias parejas, impide duplicados y permite quitarlas', async () => {
+    const user = await mount({ 1: superModalities, 2: superModalities, 3: superModalities }, { pairs: { '1-2': { enabled: true }, '1-3': { enabled: true } } });
+    await user.click(screen.getByRole('checkbox', { name: 'Súper palé' }));
+    await choosePair(user, 1, 2); await choosePair(user, 1, 3);
+    await choosePair(user, 2, 1);
+    expect(screen.getByText('Esta pareja ya está en la lista.')).toBeTruthy();
+    const block = screen.getByRole('region', { name: 'Parejas de súper palé' });
+    expect(within(block).getAllByRole('listitem')).toHaveLength(2);
+    await choosePair(user, 2, 3);
+    expect(screen.getByText('Esta pareja no está habilitada para súper palé. Elige otro sorteo.')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Cancelar pareja en preparación' }));
+    await user.click(screen.getByRole('button', { name: 'Quitar pareja Sorteo 1 + Sorteo 2' }));
+    await enterPlay(user, '1020.');
+    await waitFor(() => expect(draftLines()).toHaveLength(2));
+    expect(draftLines().map((line: any) => [line.draw_id, line.second_draw_id, line.numbers])).toEqual([[1, 3, '10-20'], [1, 3, '01-02']]);
+    await user.click(screen.getByRole('button', { name: 'Limpiar selección', exact: true }));
+    expect(screen.getByText('0 parejas seleccionadas')).toBeTruthy();
+    expect(draftLines()).toHaveLength(2);
+});
+
+test('Súper palé requiere una pareja completa y la conserva por cada ticket en espera', async () => {
+    const user = await mount({ 1: superModalities, 2: superModalities }, { pairs: { '1-2': { enabled: true } } });
+    await user.click(screen.getByRole('checkbox', { name: 'Súper palé' }));
+    await user.click(screen.getByRole('button', { name: /^Sorteo 1/ }));
+    await enterPlay(user, '1020');
+    await screen.findByText('Agrega al menos una pareja en el panel de Súper palé.');
+    expect(draftLines()).toEqual([]);
+    expect(axios.post).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Entendido' }));
+    await user.click(screen.getByRole('button', { name: /^Sorteo 2/ }));
+    await user.click(screen.getByRole('button', { name: 'Nuevo ticket F10' }));
+    expect((screen.getByRole('checkbox', { name: 'Súper palé' }) as HTMLInputElement).checked).toBe(false);
+    await user.click(screen.getByRole('tab', { name: /Ticket 1/ }));
+    expect((screen.getByRole('checkbox', { name: 'Súper palé' }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText('1 pareja seleccionada')).toBeTruthy();
+    await enterPlay(user, '1020');
+    await waitFor(() => expect(draftLines()).toHaveLength(1));
+    const saved = JSON.parse(sessionStorage.getItem(storageKey)!);
+    expect(saved.drafts.find((draft: any) => draft.id === saved.activeId).superPairs).toEqual([[1, 2]]);
+});
+
+test('el sufijo s abre la selección de parejas y vender limpia las parejas y Solo seleccionados', async () => {
+    const user = await mount({ 1: superModalities, 2: superModalities }, { pairs: { '1-2': { enabled: true } } });
+    await user.click(screen.getByRole('button', { name: /^Sorteo 1/ }));
+    await user.click(screen.getByRole('button', { name: 'Solo seleccionados' }));
+    await user.type(screen.getByLabelText('Jugada', { exact: true }), '1020s');
+    expect((screen.getByRole('checkbox', { name: 'Súper palé' }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole('button', { name: 'Solo seleccionados' }).getAttribute('aria-pressed')).toBe('false');
+    await choosePair(user, 1, 2);
+    await enterPlay(user, '1020');
+    await waitFor(() => expect(draftLines()).toHaveLength(1));
+    await user.click(screen.getByRole('button', { name: 'Solo seleccionados' }));
+    await user.click(screen.getByRole('button', { name: /Vender/ }));
+    await screen.findByText('Cobrar ticket');
+    vi.mocked(axios.post).mockImplementation(async url => String(url) === '/lottery/sales' ? { data: {
+        code: 'ticket-vendido', reference: 'T-000001', net_minor: 100, gross_minor: 100, discount_minor: 0,
+        lines: [{ draw_id: 1, second_draw_id: 2, modality: 'super_pale', numbers: '10-20', amount_minor: 100 }],
+    } } : { data: {} });
+    await user.click(screen.getByRole('button', { name: 'Confirmar venta' }));
+    await screen.findByText('Ticket emitido');
+    expect(draftLines()).toEqual([]);
+    const saved = JSON.parse(sessionStorage.getItem(storageKey)!);
+    expect(saved.drafts.find((draft: any) => draft.id === saved.activeId)).toMatchObject({ selected: [], superPairs: [] });
+    await user.click(screen.getByRole('button', { name: 'Cerrar', exact: true }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByText('0 parejas seleccionadas')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Solo seleccionados' }).getAttribute('aria-pressed')).toBe('false');
+});
 
 const duplicateQr = '514011a0-42cb-42f5-b074-331a834bb98e';
 function mockDuplicateTicket() {

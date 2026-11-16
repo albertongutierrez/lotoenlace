@@ -45,8 +45,9 @@ type Line = {
     numbers: string;
     amount: string;
 };
-type Draft = { id: string; title: string; selected: number[]; lines: Line[]; mode: string; numbers: string; amount: string; discount: boolean; requestKey: string };
-const emptyDraft = (title: string): Draft => ({ id: requestId(), title, selected: [], lines: [], mode: "quiniela", numbers: "", amount: "", discount: false, requestKey: requestId() });
+type SuperPair = [number, number];
+type Draft = { id: string; title: string; selected: number[]; superPairs?: SuperPair[]; superPale?: boolean; lines: Line[]; mode: string; numbers: string; amount: string; discount: boolean; requestKey: string };
+const emptyDraft = (title: string): Draft => ({ id: requestId(), title, selected: [], superPairs: [], superPale: false, lines: [], mode: "quiniela", numbers: "", amount: "", discount: false, requestKey: requestId() });
 export default function Sales(props: any) {
     const { auth } = usePage<PageProps>().props;
     return <SalesWorkspace key={`${auth.user.id}:${props.branch.id}`} {...props} />;
@@ -107,6 +108,10 @@ function SalesWorkspace({
     const [selectedOnly, setSelectedOnly] = useState(false);
     const [lotteryFilter, setLotteryFilter] = useState<number | null>(null);
     const [selected, setSelected] = useState<number[]>(initial.selected);
+    const [superPairs, setSuperPairs] = useState<SuperPair[]>(initial.superPairs ?? []);
+    const [superPale, setSuperPale] = useState(initial.superPale ?? initial.mode === 'super_pale');
+    const [pairStart, setPairStart] = useState<number | null>(null);
+    const [pairError, setPairError] = useState('');
     const [lines, setLines] = useState<Line[]>(initial.lines);
     const [mode, setMode] = useState(initial.mode);
     const [numbers, setNumbers] = useState(initial.numbers);
@@ -196,10 +201,10 @@ function SalesWorkspace({
     const busy = saleMutation.isPending || checkingPlay;
     const [ticket, setTicket] = useState<any>(null);
     const requestKey = useRef(initial.requestKey);
-    const snapshot = (): Draft => ({ id: activeDraftId, title: drafts.find(d => d.id === activeDraftId)?.title ?? "Ticket", selected, lines, mode, numbers, amount, discount, requestKey: requestKey.current });
+    const snapshot = (): Draft => ({ id: activeDraftId, title: drafts.find(d => d.id === activeDraftId)?.title ?? "Ticket", selected, superPairs, superPale, lines, mode, numbers, amount, discount, requestKey: requestKey.current });
     useEffect(() => {
         try { sessionStorage.setItem(storageKey, JSON.stringify({ version: 1, activeId: activeDraftId, drafts: drafts.map(d => d.id === activeDraftId ? snapshot() : d) })); } catch { /* Browsers may disable session storage. */ }
-    }, [drafts, activeDraftId, selected, lines, mode, numbers, amount, discount]);
+    }, [drafts, activeDraftId, selected, superPairs, superPale, lines, mode, numbers, amount, discount]);
     const getWindow = (d: Draw) => {
         const current = new Date(now + offset.current);
         const date = new Intl.DateTimeFormat("en-CA", {
@@ -235,19 +240,43 @@ function SalesWorkspace({
             now + offset.current < w.close
         );
     };
+    const pairEnabled = ([first, second]: SuperPair) => first !== second &&
+        [first, second].every(id => isOpen(id) && draws.find((d: Draw) => d.id === id)?.modalities.includes('super_pale')) &&
+        !!settings.pairs?.[`${Math.min(first, second)}-${Math.max(first, second)}`]?.enabled;
+    const chooseSuperDraw = (id: number) => {
+        setPairError('');
+        if (pairStart === null) { setPairStart(id); return; }
+        if (pairStart === id) { setPairStart(null); return; }
+        const pair: SuperPair = [Math.min(pairStart, id), Math.max(pairStart, id)];
+        if (!pairEnabled(pair)) { setPairError('Esta pareja no está habilitada para súper palé. Elige otro sorteo.'); return; }
+        if (superPairs.some(([first, second]) => first === pair[0] && second === pair[1])) {
+            setPairError('Esta pareja ya está en la lista.');
+        } else setSuperPairs(current => [...current, pair]);
+        setPairStart(null);
+    };
+    const toggleSuperPale = (enabled: boolean) => {
+        setSuperPale(enabled); setPairStart(null); setPairError(''); setSelectedOnly(false);
+        const value = numbers.replace(/s/gi, '');
+        setNumbers(value);
+        setMode(enabled ? 'super_pale' : parsePlay(value)?.modality ?? 'quiniela');
+    };
+    const panelSelected = superPale ? [...new Set([...superPairs.flat(), ...(pairStart === null ? [] : [pairStart])])] : selected;
     useEffect(() => {
         const timer = setInterval(() => setNow(Date.now()), 1000);
         return () => clearInterval(timer);
     }, []);
     useEffect(() => {
         const closed = selected.filter((id) => !isOpen(id));
+        const closedPairs = superPairs.some(pair => !pairEnabled(pair));
+        if (pairStart !== null && !isOpen(pairStart)) setPairStart(null);
         const expired = lines.some(
             (l) =>
                 !isOpen(l.draw_id) ||
                 (l.second_draw_id && !isOpen(l.second_draw_id)),
         );
-        if (closed.length || expired) {
+        if (closed.length || closedPairs || expired) {
             setSelected((s) => s.filter(isOpen));
+            setSuperPairs(pairs => pairs.filter(pairEnabled));
             setLines((ls) =>
                 ls.filter(
                     (l) =>
@@ -262,8 +291,8 @@ function SalesWorkspace({
         }
     }, [now]);
     const makeLines = (m = mode, n = numbers, stake = amount, targetIds = selected): Line[] => {
-        const ids = targetIds.filter(id => m !== 'super_pale' || draws.find((d: Draw) => d.id === id)?.modalities.includes('super_pale')).sort((a, b) => a - b);
-        if (!ids.length) throw Error("Selecciona al menos un sorteo.");
+        const ids = targetIds;
+        if (m === 'super_pale' ? !superPairs.length : !ids.length) throw Error(m === 'super_pale' ? 'Agrega al menos una pareja en el panel de Súper palé.' : 'Selecciona al menos un sorteo.');
         if (!/^\d+(\.\d{1,2})?$/.test(stake) || Number(stake) <= 0)
             throw Error("Indica un monto válido.");
         const variants = parsePlayVariants(n, m);
@@ -271,26 +300,11 @@ function SalesWorkspace({
             throw Error("Indica 1–2 dígitos para quiniela, 4 para palé o 6 para tripleta; usa s para súper palé. Añade un punto final para derecho y revés.");
         const eligible = (id: number) =>
             draws.find((d: Draw) => d.id === id)?.modalities.includes(m);
-        if (ids.some((id) => !eligible(id)))
+        if (m !== 'super_pale' && ids.some((id) => !eligible(id)))
             throw Error("Algún sorteo seleccionado no admite esa modalidad.");
         if (m === "super_pale") {
-            if (ids.length < 2) throw Error("Selecciona dos sorteos o más.");
-            const result: Line[] = [];
-            for (let i = 0; i < ids.length; i++)
-                for (let j = i + 1; j < ids.length; j++) {
-                    if (!settings.pairs?.[`${ids[i]}-${ids[j]}`]?.enabled)
-                        throw Error(
-                            "Una pareja seleccionada no está habilitada para súper palé.",
-                        );
-                    result.push(...variants.map(({ numbers }) => ({
-                        draw_id: ids[i],
-                        second_draw_id: ids[j],
-                        modality: m,
-                        numbers,
-                        amount: stake,
-                    })));
-                }
-            return result;
+            if (superPairs.some(pair => !pairEnabled(pair))) throw Error('Una pareja seleccionada está cerrada o no está habilitada para súper palé.');
+            return superPairs.flatMap(([draw_id, second_draw_id]) => variants.map(({ numbers }) => ({ draw_id, second_draw_id, modality: m, numbers, amount: stake })));
         }
         return ids.flatMap((id) => variants.map(({ numbers }) => ({
             draw_id: id,
@@ -475,6 +489,7 @@ function SalesWorkspace({
             setTicket(data);
             setLines([]);
             setSelected([]);
+            setSuperPairs([]); setPairStart(null); setPairError('');
             setSelectedOnly(false);
             requestKey.current = requestId();
         } catch (e) {
@@ -675,6 +690,7 @@ function SalesWorkspace({
     const loadDraft = (draft: Draft) => {
         const valid = draft.lines.filter(line => isOpen(line.draw_id) && (!line.second_draw_id || isOpen(line.second_draw_id)));
         setActiveDraftId(draft.id); setSelected(draft.selected.filter(isOpen)); setLines(valid);
+        setSuperPairs((draft.superPairs ?? []).filter(pairEnabled)); setSuperPale(draft.superPale ?? draft.mode === 'super_pale'); setPairStart(null); setPairError('');
         setMode(draft.mode); setNumbers(draft.numbers); setAmount(draft.amount); setDiscount(draft.discount);
         requestKey.current = valid.length === draft.lines.length ? draft.requestKey : requestId();
         setSelectedOnly(false); setLotteryFilter(null); setTicket(null);
@@ -923,19 +939,21 @@ function SalesWorkspace({
                 </form>
             </Modal>
             {ticket && <IssuedTicketModal key={ticket.reference ?? ticket.code} ticket={ticket} draws={draws} branch={branch} currency={currency} onClose={() => { setTicket(null); requestAnimationFrame(() => numbersRef.current?.focus()); }} />}
-            <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_240px] grid-rows-[auto_minmax(0,1fr)] gap-3 xl:grid-cols-[minmax(0,1fr)_280px]">
-            <section className={`${panel} col-start-2 row-start-1 row-span-2 flex min-h-0 flex-col`}>
+            <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_240px] grid-rows-[auto_minmax(0,1fr)] gap-3 md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
+            <section aria-label="Selección de sorteos" className={`${panel} col-start-2 row-start-1 row-span-2 flex min-h-0 flex-col`}>
                 <div className="mb-3 grid shrink-0 gap-2 border-b border-slate-200 pb-3 dark:border-slate-700" role="group" aria-label="Filtrar por lotería">
+                    <div className="flex items-center justify-between gap-2"><span className={`text-sm font-semibold ${superPale ? 'text-slate-500' : ''}`}>Regulares</span><label className={`inline-flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-2 text-sm font-semibold ${superPale ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'border-slate-300 dark:border-slate-700'}`}><input type="checkbox" checked={superPale} disabled={busy} onChange={e => toggleSuperPale(e.target.checked)} className="rounded border-slate-400 text-emerald-600 focus:ring-emerald-500" />Súper palé</label></div>
                     <ComboboxSelect aria-label="Filtrar por lotería" className={input} value={lotteryFilter ?? ""} onChange={e => setLotteryFilter(e.target.value ? Number(e.target.value) : null)}><option value="">Todas las loterías</option>{Array.from(new Map<number, { id: number; name: string }>(draws.filter((d: Draw) => isOpen(d.id)).map((d: Draw) => [d.lottery_id, { id: d.lottery_id, name: d.lottery?.name ?? "Lotería" }])).values()).map(lottery => <option key={lottery.id} value={lottery.id}>{lottery.name}</option>)}</ComboboxSelect>
                     <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{selected.length} {selected.length === 1 ? "sorteo seleccionado" : "sorteos seleccionados"}</span>
-                        <button type="button" title="Limpiar selección" aria-label="Limpiar selección" disabled={busy || !selected.length} onClick={() => { setSelected([]); setSelectedOnly(false); }} className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"><Eraser className="h-3.5 w-3.5" />Limpiar</button>
+                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{superPale ? `${superPairs.length} ${superPairs.length === 1 ? 'pareja seleccionada' : 'parejas seleccionadas'}` : `${selected.length} ${selected.length === 1 ? 'sorteo seleccionado' : 'sorteos seleccionados'}`}</span>
+                        <button type="button" title="Limpiar selección" aria-label="Limpiar selección" disabled={busy || !panelSelected.length} onClick={() => { if (superPale) { setSuperPairs([]); setPairStart(null); setPairError(''); } else setSelected([]); setSelectedOnly(false); }} className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"><Eraser className="h-3.5 w-3.5" />Limpiar</button>
                     </div>
                     <button type="button" aria-pressed={selectedOnly} onClick={() => setSelectedOnly(value => !value)} className={`flex w-full items-center justify-center gap-2 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors ${selectedOnly ? "border-emerald-600 bg-emerald-700 text-white" : "border-slate-300 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"}`}><ListChecks className="h-4 w-4" />Solo seleccionados</button>
+                    {superPale && <div className="space-y-1 text-xs"><p role="status" className="text-slate-600 dark:text-slate-400">{pairStart === null ? 'Elige dos sorteos para añadir una pareja.' : `Combinar ${draws.find((d: Draw) => d.id === pairStart)?.name} con…`}</p>{pairStart !== null && <button type="button" className="text-emerald-700 underline dark:text-emerald-400" disabled={busy} onClick={() => { setPairStart(null); setPairError(''); }}>Cancelar pareja en preparación</button>}{pairError && <p role="alert" className="text-amber-700 dark:text-amber-400">{pairError}</p>}</div>}
                 </div>
                 <div tabIndex={0} aria-label="Sorteos disponibles" className="grid min-h-0 flex-1 auto-rows-max grid-cols-1 content-start gap-2 overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin] [scrollbar-color:#94a3b8_#f1f5f9] dark:[scrollbar-color:#475569_#0f172a]">
                     {draws
-                        .filter((d: Draw) => isOpen(d.id) && (lotteryFilter === null || d.lottery_id === lotteryFilter) && (!selectedOnly || selected.includes(d.id)))
+                        .filter((d: Draw) => isOpen(d.id) && (!superPale || d.modalities.includes('super_pale')) && (lotteryFilter === null || d.lottery_id === lotteryFilter) && (!selectedOnly || panelSelected.includes(d.id)))
                         .sort((a: Draw, b: Draw) => getWindow(a).close - getWindow(b).close || a.closes_at.localeCompare(b.closes_at) || a.name.localeCompare(b.name, "es") || a.id - b.id)
                         .map((d: Draw) => {
                             const seconds = Math.max(
@@ -952,24 +970,17 @@ function SalesWorkspace({
                                     disabled={busy}
                                     title={`${drawName(d)} · Cierra en ${Math.floor(seconds / 3600).toString().padStart(2, "0")}:${Math.floor(seconds / 60 % 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`}
                                     key={d.id}
-                                    aria-pressed={selected.includes(d.id)}
-                                    className={`relative min-w-0 rounded-lg border p-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 ${selected.includes(d.id) ? "border-emerald-600 bg-emerald-50 text-emerald-950 ring-1 ring-emerald-600 dark:border-emerald-400 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-400" : "border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"}`}
-                                    onClick={() =>
-                                        setSelected(
-                                            selected.includes(d.id)
-                                                ? selected.filter(
-                                                      (id) => id !== d.id,
-                                                  )
-                                                : [...selected, d.id],
-                                        )
-                                    }
+                                    aria-pressed={panelSelected.includes(d.id)}
+                                    className={`relative min-w-0 rounded-lg border p-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 ${panelSelected.includes(d.id) ? "border-emerald-600 bg-emerald-50 text-emerald-950 ring-1 ring-emerald-600 dark:border-emerald-400 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-400" : "border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"}`}
+                                    onClick={() => superPale ? chooseSuperDraw(d.id) : setSelected(selected.includes(d.id) ? selected.filter(id => id !== d.id) : [...selected, d.id])}
                                 >
                                     <span className="flex items-start gap-2">
-                                        <span aria-hidden="true" className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${selected.includes(d.id) ? "border-emerald-600 bg-emerald-600 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-emerald-950" : "border-slate-400 dark:border-slate-500"}`}>
-                                            {selected.includes(d.id) && <Check className="h-3 w-3" />}
+                                        <span aria-hidden="true" className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${panelSelected.includes(d.id) ? "border-emerald-600 bg-emerald-600 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-emerald-950" : "border-slate-400 dark:border-slate-500"}`}>
+                                            {panelSelected.includes(d.id) && <Check className="h-3 w-3" />}
                                         </span>
                                         <span className="min-w-0 break-words text-sm font-semibold leading-5">{d.name}</span>
                                     </span>
+                                    {superPale && pairStart === d.id && <span className="mt-1 block pl-6 text-xs font-semibold text-emerald-700 dark:text-emerald-400">Primer sorteo · elige el segundo</span>}
                                     <span className={`mt-1 block pl-6 text-xs tabular-nums ${seconds < 300 ? "font-semibold text-red-600 dark:text-red-400" : "text-slate-600 dark:text-slate-400"}`}>
                                         Cierra en{" "}
                                         {Math.floor(seconds / 3600)
@@ -988,13 +999,15 @@ function SalesWorkspace({
                             );
                         })}
                 </div>
-                {selectedOnly && !draws.some((d: Draw) => isOpen(d.id) && selected.includes(d.id) && (lotteryFilter === null || d.lottery_id === lotteryFilter)) && <p className="py-2 text-sm text-slate-500">No hay sorteos seleccionados para este filtro.</p>}
+                {selectedOnly && !draws.some((d: Draw) => isOpen(d.id) && panelSelected.includes(d.id) && (lotteryFilter === null || d.lottery_id === lotteryFilter)) && <p className="py-2 text-sm text-slate-500">No hay sorteos seleccionados para este filtro.</p>}
                 {!draws.some((d: Draw) => isOpen(d.id)) && (
                     <p className="text-sm text-slate-500">
                         No hay sorteos abiertos y habilitados. Revisa el
                         catálogo y la configuración de la banca.
                     </p>
                 )}
+                {superPale && draws.some((d: Draw) => isOpen(d.id)) && !draws.some((d: Draw) => isOpen(d.id) && d.modalities.includes('super_pale')) && <p className="py-2 text-sm text-slate-500">No hay sorteos abiertos habilitados para súper palé.</p>}
+                {superPale && <section aria-label="Parejas de súper palé" className="mt-3 flex max-h-[40%] min-h-24 shrink-0 flex-col rounded-lg border border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/30"><h2 className="shrink-0 border-b border-emerald-200 px-3 py-2 text-xs font-semibold dark:border-emerald-900">Combinaciones a jugar · {superPairs.length}</h2><ul className="min-h-0 space-y-2 overflow-y-auto p-2">{superPairs.map(([first, second]) => { const name = [first, second].map(id => draws.find((d: Draw) => d.id === id)?.name ?? `Sorteo #${id}`).join(' + '); return <li key={`${first}-${second}`} className="flex items-start gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-2 dark:border-slate-700 dark:bg-slate-900"><span className="min-w-0 flex-1 break-words text-xs font-medium leading-5">{name}</span><button type="button" aria-label={`Quitar pareja ${name}`} title="Quitar pareja" disabled={busy} onClick={() => setSuperPairs(pairs => pairs.filter(pair => pair[0] !== first || pair[1] !== second))} className="shrink-0 rounded p-0.5 text-slate-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"><X size={15} /></button></li>; })}{!superPairs.length && <li className="p-1 text-xs text-slate-500">Las parejas que elijas aparecerán aquí.</li>}</ul></section>}
             </section>
             <section className={`${panel} shrink-0`}>
                 <form
@@ -1018,20 +1031,22 @@ function SalesWorkspace({
                                     ? "10"
                                     : mode === "tripleta"
                                       ? "102030"
-                                      : mode === "super_pale" ? "1020s" : "1020"
+                                      : "1020"
                             }
                             onChange={(e) => {
                                 const value = e.target.value;
                                 if (!/^(?:s?\d*|\d+s)\.?$/i.test(value)) return;
                                 setNumbers(value);
-                                const parsed = parsePlay(value);
-                                if (parsed) setMode(parsed.modality);
+                                const parsed = parsePlay(value, superPale ? 'super_pale' : undefined);
+                                if (parsed?.modality === 'super_pale' && !superPale) { setSuperPale(true); setSelectedOnly(false); setPairStart(null); setPairError(''); }
+                                if (parsed) setMode(superPale ? 'super_pale' : parsed.modality);
                             }}
                             onKeyDown={(e) => {
                                 if (e.key !== "Enter") return;
                                 e.preventDefault();
                                 const parsed = parsePlay(numbers, mode);
                                 if (!parsed) { setMessage("Completa una jugada válida."); return; }
+                                if (superPale && parsed.modality !== 'super_pale') { setMessage('Para súper palé escribe dos números de dos dígitos, por ejemplo 1020.'); return; }
                                 setNumbers(parsed.numbers.replaceAll("-", "") + (parsed.modality === "super_pale" ? "s" : "") + (numbers.endsWith(".") ? "." : ""));
                                 setMode(parsed.modality);
                                 setMessage("");
@@ -1044,7 +1059,7 @@ function SalesWorkspace({
                     <Field label="Disponible">
                         <input className={`${input} bg-slate-50 dark:bg-slate-900`} readOnly tabIndex={-1}
                             aria-label="Disponible" aria-live="polite"
-                            value={selected.length !== 1 ? "—" : availability.isFetching ? "Consultando…" : available === null ? "Sin límite" : available === undefined ? "—" : money(available, currency)} />
+                            value={superPale || selected.length !== 1 ? "—" : availability.isFetching ? "Consultando…" : available === null ? "Sin límite" : available === undefined ? "—" : money(available, currency)} />
                     </Field>
                     <Field label="Monto por sorteo / pareja">
                         <MoneyInput
@@ -1063,8 +1078,7 @@ function SalesWorkspace({
                     </button>
                     </fieldset>
                 </form>
-
-
+                {superPale && <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">Súper palé · {superPairs.length} {superPairs.length === 1 ? 'pareja' : 'parejas'}. Escribe el palé, por ejemplo 1020; se agregará únicamente a las combinaciones de la derecha.</p>}
             </section>
             <div className="grid min-h-0 flex-1 grid-cols-3 gap-3">
                 {["quiniela", "pale", "tripleta"].map((group) => (
