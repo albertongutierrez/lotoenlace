@@ -12,6 +12,7 @@ class PayoutReceipt
             && ($payment->payload['ticket'] ?? null) === $ticket->code, 404);
         $receipt = $payment->payload['receipt'] ?? null;
         abort_unless(is_array($receipt), 422, 'Este pago no tiene un comprobante registrado.');
+        $receipt = app(ReceiptDrawNames::class)->fullNames($receipt);
         return [...$receipt, 'document_type' => 'payout', 'payment_id' => $payment->id,
             'payment_reference' => 'P-'.str_pad((string) $payment->office_number, 6, '0', STR_PAD_LEFT),
             'code' => $ticket->code, 'reference' => $ticket->reference,

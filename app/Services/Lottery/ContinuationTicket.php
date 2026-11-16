@@ -16,17 +16,16 @@ class ContinuationTicket
     public function snapshot(Ticket $ticket, BranchOffice $bank, Collection $lines): array
     {
         $qr = (bool) app(Configuration::class)->effective($bank)['show_qr'];
-        $abbreviated = (bool) app(Configuration::class)->effective($bank)['abbreviate_draw_names'];
         $gross = $lines->sum('amount_minor');
         $net = $lines->sum('net_minor');
         return [
             'branch' => $bank->code, 'branch_id' => $bank->id, 'company_name' => $bank->office->name, 'branch_name' => $bank->name ?: $bank->code,
             'currency' => $ticket->currency, 'gross_minor' => $gross, 'discount_minor' => $gross - $net, 'net_minor' => $net,
-            'show_qr' => $qr, 'print_settings' => ['show_qr' => $qr, 'abbreviate_draw_names' => $abbreviated, 'company_name' => $bank->office->name, 'branch_name' => $bank->name ?: $bank->code],
+            'show_qr' => $qr, 'print_settings' => ['show_qr' => $qr, 'company_name' => $bank->office->name, 'branch_name' => $bank->name ?: $bank->code],
             'footer' => $ticket->settings_snapshot['footer'] ?? '',
-            'lines' => $lines->load(['draw:id,name,abbreviation', 'secondDraw:id,name,abbreviation'])->map(fn ($line) => [
+            'lines' => $lines->load(['draw:id,name', 'secondDraw:id,name'])->map(fn ($line) => [
                 'ticket_line_id' => $line->id, 'draw_id' => $line->draw_id, 'second_draw_id' => $line->second_draw_id,
-                'draw' => $line->draw->displayName($abbreviated).($line->secondDraw ? ' + '.$line->secondDraw->displayName($abbreviated) : ''),
+                'draw' => $line->draw->name.($line->secondDraw ? ' + '.$line->secondDraw->name : ''),
                 'modality' => $line->modality, 'numbers' => $line->numbers, 'amount_minor' => $line->amount_minor,
             ])->values()->all(),
         ];
@@ -43,6 +42,7 @@ class ContinuationTicket
         abort_unless($this->latestPayment($ticket)?->id === $payment->id, 409, 'Este ticket de continuación fue sustituido por un pago posterior. Consulta el ticket actual.');
         $snapshot = $payment->payload['continuation'] ?? null;
         abort_unless($ticket->status === 'sold' && is_array($snapshot) && !empty($snapshot['lines']), 422, 'No hay jugadas pendientes en este pago.');
+        $snapshot = app(ReceiptDrawNames::class)->fullNames($snapshot);
         return [...$snapshot, 'document_type' => 'continuation', 'payment_id' => $payment->id, 'status' => $ticket->status,
             'reference' => $ticket->reference, 'code' => $ticket->code,
             'payment_reference' => 'P-'.str_pad((string) $payment->office_number, 6, '0', STR_PAD_LEFT),

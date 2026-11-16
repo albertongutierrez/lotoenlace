@@ -1520,6 +1520,8 @@ class LotteryEngineTest extends TestCase
         config(['printing.private_key_path' => $directory.'/private.pem']);
         $this->artisan('lottery:print-agent-key')->assertExitCode(0);
         try {
+            $this->a->update(['abbreviation' => 'ABR']);
+            $this->office->update(['lottery_settings' => [...$this->office->lottery_settings, 'abbreviate_draw_names' => true]]);
             $ticket = $this->sell([$this->line(), [...$this->line(), 'draw_id' => $this->b->id, 'numbers' => '20']]);
             $ticket->update(['payment_pin' => '000042', 'created_at' => now()->subDays(2), 'business_date' => now()->subDays(2)->toDateString()]);
             $lines = $ticket->lines()->orderBy('id')->get();
@@ -1529,6 +1531,12 @@ class LotteryEngineTest extends TestCase
             $first = $this->postJson($payUrl, ['pin' => '000042'])->assertOk()->assertJsonPath('payment_receipt.document_type', 'payout')
                 ->assertJsonPath('payment_receipt.net_minor', 7500)->assertJsonCount(1, 'payment_receipt.lines')->assertJsonMissingPath('payment_receipt.pin');
             $paymentId = $first->json('payment_receipt.payment_id');
+            $this->assertSame('A', $first->json('payment_receipt.lines.0.draw'));
+            $payment = \App\Models\LotteryAudit::findOrFail($paymentId);
+            $payload = $payment->payload;
+            $payload['receipt']['print_settings']['abbreviate_draw_names'] = true;
+            $payload['receipt']['lines'][0]['draw'] = 'ABR';
+            $payment->update(['payload' => $payload]);
             $this->assertSame($this->seller->name, $first->json('payment_receipt.paid_by'));
             $lines[1]->update(['prize_minor' => 15000]);
             $this->postJson($payUrl, ['pin' => '000042'])->assertUnprocessable();
@@ -1544,6 +1552,7 @@ class LotteryEngineTest extends TestCase
             $this->assertSame(7500, $data['receipt']['net_minor']);
             $this->assertCount(1, $data['receipt']['lines']);
             $this->assertSame('10', $data['receipt']['lines'][0]['numbers']);
+            $this->assertSame('A', $data['receipt']['lines'][0]['draw']);
             $this->assertArrayNotHasKey('pin', $data['receipt']);
             $this->assertSame(now()->addMinutes(2)->timestamp, $data['expires_at']);
             $publicKey = $this->getJson('/printing-agent/public-key')->assertOk()->json('public_key');
@@ -1576,6 +1585,9 @@ class LotteryEngineTest extends TestCase
         config(['printing.private_key_path' => $directory.'/private.pem']);
         $this->artisan('lottery:print-agent-key')->assertExitCode(0);
         try {
+            $this->a->update(['abbreviation' => 'ABR A']);
+            $this->b->update(['abbreviation' => 'ABR B']);
+            $this->office->update(['lottery_settings' => [...$this->office->lottery_settings, 'abbreviate_draw_names' => true]]);
             $ticket = $this->sell([$this->line('10'), [...$this->line('5'), 'numbers' => '11'], [...$this->line('4'), 'draw_id' => $this->b->id, 'numbers' => '20'], $this->line('3', true)]);
             $ticket->update(['payment_pin' => '000042', 'created_at' => now()->subDays(2), 'business_date' => now()->subDays(2)->toDateString()]);
             $lines = $ticket->lines()->orderBy('id')->get();
@@ -1589,6 +1601,13 @@ class LotteryEngineTest extends TestCase
             $firstPin = $ticket->fresh()->payment_pin;
             $this->assertNotSame('000042', $firstPin); $this->assertMatchesRegularExpression('/^[0-9]{6}$/D', $firstPin);
             $paymentId = $first->json('continuation_ticket.payment_id');
+            $this->assertSame(['B', 'A + B'], array_column($first->json('continuation_ticket.lines'), 'draw'));
+            $payment = \App\Models\LotteryAudit::findOrFail($paymentId);
+            $payload = $payment->payload;
+            $payload['continuation']['print_settings']['abbreviate_draw_names'] = true;
+            $payload['continuation']['lines'][0]['draw'] = 'ABR B';
+            $payload['continuation']['lines'][1]['draw'] = 'ABR A + ABR B';
+            $payment->update(['payload' => $payload]);
             $request = ['attempt_key' => (string) Str::uuid(), 'trigger' => 'automatic', 'transport' => 'local',
                 'device_id' => (string) Str::uuid(), 'printer' => 'Térmica USB', 'profile' => 'epson', 'paper_width' => 80, 'cut' => true,
                 'document_type' => 'continuation', 'payment_id' => $paymentId];
@@ -1598,6 +1617,7 @@ class LotteryEngineTest extends TestCase
             $this->assertSame($firstPin, $receipt['pin']); $this->assertSame('continuation', $receipt['document_type']);
             $this->assertSame(['20', '10-20'], array_column($receipt['lines'], 'numbers'));
             $this->assertSame(['quiniela', 'super_pale'], array_column($receipt['lines'], 'modality'));
+            $this->assertSame(['B', 'A + B'], array_column($receipt['lines'], 'draw'));
             $this->postJson($printUrl, $request)->assertOk()->assertJsonPath('audit_id', $printed->json('audit_id'));
             $this->assertSame($firstPin, $ticket->fresh()->payment_pin);
             $this->getJson('/lottery/tickets/'.$ticket->code.'?reprint=1')->assertOk()->assertJsonPath('document_type', 'continuation')->assertJsonCount(2, 'lines')->assertJsonMissingPath('pin');
@@ -1842,7 +1862,7 @@ class LotteryEngineTest extends TestCase
             $this->assertSame(0, $data['target']['feed_lines']);
             $this->assertSame('large', $data['target']['text_size']);
             $this->assertSame($ticket->lines()->first()->draw_id, $data['receipt']['lines'][0]['draw_id']);
-            $this->assertSame('ABR', $data['receipt']['lines'][0]['draw']);
+            $this->assertSame('A', $data['receipt']['lines'][0]['draw']);
             $this->assertLessThanOrEqual(120, $data['expires_at'] - $data['issued_at']);
             $this->assertStringNotContainsString('000042', \App\Models\LotteryAudit::all()->toJson());
             $this->postJson($url, $request)->assertOk()->assertJsonPath('sequence', 1);

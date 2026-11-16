@@ -574,7 +574,7 @@ class LotteryController extends Controller
 
 
         $ticket = $sales->sell($r->user(), $b, $data);
-        $ticket->setAttribute('print_settings', ['show_qr' => (bool) app(Configuration::class)->effective($b)['show_qr'], 'abbreviate_draw_names' => (bool) app(Configuration::class)->effective($b)['abbreviate_draw_names'], 'company_name' => $b->office->name, 'branch_name' => $b->name ?: $b->code]);
+        $ticket->setAttribute('print_settings', ['show_qr' => (bool) app(Configuration::class)->effective($b)['show_qr'], 'company_name' => $b->office->name, 'branch_name' => $b->name ?: $b->code]);
         return response()->json($ticket);
 
     }
@@ -694,7 +694,7 @@ class LotteryController extends Controller
             $reason = app(\App\Services\Lottery\PrintPolicy::class)->denial($ticket);
             abort_if($reason !== null, 422, $reason ?? '');
         }
-        $ticket->setAttribute('print_settings', ['show_qr' => (bool) app(Configuration::class)->effective($b)['show_qr'], 'abbreviate_draw_names' => (bool) app(Configuration::class)->effective($b)['abbreviate_draw_names'], 'company_name' => $b->office->name, 'branch_name' => $b->name ?: $b->code, 'test_reprint' => app(\App\Services\Lottery\PrintPolicy::class)->isTestOffice($b->office_id)]);
+        $ticket->setAttribute('print_settings', ['show_qr' => (bool) app(Configuration::class)->effective($b)['show_qr'], 'company_name' => $b->office->name, 'branch_name' => $b->name ?: $b->code, 'test_reprint' => app(\App\Services\Lottery\PrintPolicy::class)->isTestOffice($b->office_id)]);
         $ticket->setAttribute('cancellation', app(\App\Services\Lottery\CancellationPolicy::class)->state($ticket));
         return $ticket;
 

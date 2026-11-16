@@ -12,8 +12,7 @@ export function ticketReceiptHtml(ticket: any, draws: { id: number; name: string
     const company = ticket.print_settings?.company_name ?? branch.office?.name ?? '';
     const branchName = ticket.print_settings?.branch_name ?? branch.name ?? branch.code;
     const paymentLabel = !payout && !continuation ? `<p>Cobro: ${escapeHtml(ticketPaymentMethodName(ticket))}</p>` : '';
-    const abbreviated = ticket.print_settings?.abbreviate_draw_names ?? ticket.settings_snapshot?.abbreviate_draw_names ?? false;
-    const name = (id: number, record?: {name: string; abbreviation?: string | null}) => { const draw = record ?? draws.find(draw => draw.id === id); return draw ? (abbreviated && draw.abbreviation?.trim() ? draw.abbreviation : draw.name) : String(id); };
+    const name = (id: number, record?: {name: string}) => (record ?? draws.find(draw => draw.id === id))?.name ?? String(id);
     const groups = groupReceiptLines((ticket.lines ?? []).map((line: any) => ({ ...line, draw: typeof line.draw === 'string' ? line.draw : name(line.draw_id, line.draw) + (line.second_draw_id ? ' + ' + name(line.second_draw_id, line.second_draw) : '') })));
     const rows = groups.map(group => {
         let modality = '';

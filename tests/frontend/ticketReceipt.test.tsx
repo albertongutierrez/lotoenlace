@@ -3,13 +3,13 @@ import { expect, test } from 'vitest';
 import { ticketReceiptHtml } from '../../resources/js/lib/ticketReceipt';
 import { defaultPreference } from '../../resources/js/lib/localPrinter';
 
-test('las abreviaturas siguen la configuración de impresión y conservan nombres completos cuando faltan', () => {
+test('el ticket siempre usa nombres completos aunque ventas o una configuración anterior activen abreviaturas', () => {
     const draws = [{id:1, name:'Sorteo completo A', abbreviation:'SA'}, {id:2, name:'Sorteo completo B'}];
     const ticket = {created_at:'2026-11-16T12:00:00Z', net_minor:200, lines:draws.map(draw=>({draw_id:draw.id, modality:'quiniela', numbers:'10', amount_minor:100}))};
-    for (const abbreviated of [true, false]) {
-        const html = ticketReceiptHtml({...ticket, print_settings:{abbreviate_draw_names:abbreviated}}, draws, {code:'001'}, 'DOP', defaultPreference);
+    for (const paper_width of [58, 80] as const) for (const abbreviated of [true, false]) for (const embedded of [true, false]) {
+        const html = ticketReceiptHtml({...ticket, lines:ticket.lines.map((line, i)=>({...line, ...(embedded ? {draw:draws[i]} : {})})), print_settings:{abbreviate_draw_names:abbreviated}, settings_snapshot:{abbreviate_draw_names:abbreviated}}, draws, {code:'001'}, 'DOP', {...defaultPreference, paper_width});
         const doc = new DOMParser().parseFromString(html,'text/html');
-        expect([...doc.querySelectorAll('.draw')].map(node=>node.textContent)).toEqual([abbreviated?'SA':'Sorteo completo A','Sorteo completo B']);
+        expect([...doc.querySelectorAll('.draw')].map(node=>node.textContent)).toEqual(['Sorteo completo A','Sorteo completo B']);
     }
 });
 

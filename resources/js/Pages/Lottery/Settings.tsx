@@ -256,7 +256,7 @@ export default function Settings({
                             <Field
                                 key={k}
                                 label={
-                                    k === "abbreviate_draw_names" ? "Usar abreviaturas de sorteos en ventas y tickets" : k === "copy_consortium_tickets" ? "Copiar tickets de otras bancas del consorcio" : k === "show_qr"
+                                    k === "abbreviate_draw_names" ? "Usar abreviaturas de sorteos en ventas" : k === "copy_consortium_tickets" ? "Copiar tickets de otras bancas del consorcio" : k === "show_qr"
                                         ? "Mostrar QR en el ticket"
                                         : "Descuento habilitado"
                                 }

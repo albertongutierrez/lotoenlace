@@ -21,7 +21,7 @@ const labels: Record<string, string> = {
     discount_enabled: 'Descuento habilitado', discount_every_minor: 'Descuento por cada monto jugado', discount_amount_minor: 'Monto del descuento',
     footer: 'Pie del ticket', show_qr: 'QR del ticket', draw_ids: 'Sorteos habilitados', reconciliation_mode: 'Forma de cuadre',
     copy_consortium_tickets: 'Copiar tickets del consorcio',
-    abbreviate_draw_names: 'Abreviaturas de sorteos en ventas y tickets',
+    abbreviate_draw_names: 'Abreviaturas de sorteos en ventas',
     payment_methods: 'Medios de cobro y referencias', payment_method_labels: 'Nombres de los medios de cobro',
     commission_bps: 'Comisión', payouts: 'Premios', enabled: 'Habilitación', ordered: 'Números asignados por sorteo', primary_draw_id: 'Sorteo base',
 };

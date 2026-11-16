@@ -149,7 +149,6 @@ class ResultService
             $lines = $ticket->lines()->where('prize_minor', '>', 0)->whereNull('paid_at')->get();
             abort_if($lines->isEmpty(), 422, 'No hay premios pendientes de pago.');
             $bank = \App\Models\BranchOffice::with('office')->findOrFail($ticket->branch_office_id);
-            $abbreviated = (bool) app(Configuration::class)->effective($bank)['abbreviate_draw_names'];
             $cash = app(CashService::class)->forOperation($bank);
             if ($cash) app(CashService::class)->record($cash, $user, 'prize', -$lines->sum('prize_minor'), 'prize:'.$ticket->id.':'.hash('sha256', $lines->sortBy('id')->pluck('id')->implode(',')), 'Pago de premios '.$ticket->code, $ticket->id);
             foreach ($lines as $line) {
@@ -170,10 +169,10 @@ class ResultService
                     'branch' => $bank->code, 'branch_id' => $bank->id, 'paid_by' => $user->name,
                     'currency' => $ticket->currency, 'net_minor' => $lines->sum('prize_minor'),
                     'gross_minor' => $lines->sum('prize_minor'), 'discount_minor' => 0,
-                    'show_qr' => false, 'print_settings' => ['show_qr' => false, 'abbreviate_draw_names' => $abbreviated, 'company_name' => $bank->office->name, 'branch_name' => $bank->name ?: $bank->code],
-                    'lines' => $lines->load(['draw:id,name,abbreviation', 'secondDraw:id,name,abbreviation'])->map(fn ($line) => [
+                    'show_qr' => false, 'print_settings' => ['show_qr' => false, 'company_name' => $bank->office->name, 'branch_name' => $bank->name ?: $bank->code],
+                    'lines' => $lines->load(['draw:id,name', 'secondDraw:id,name'])->map(fn ($line) => [
                         'ticket_line_id' => $line->id, 'draw_id' => $line->draw_id, 'second_draw_id' => $line->second_draw_id,
-                        'draw' => $line->draw->displayName($abbreviated).($line->secondDraw ? ' + '.$line->secondDraw->displayName($abbreviated) : ''),
+                        'draw' => $line->draw->name.($line->secondDraw ? ' + '.$line->secondDraw->name : ''),
                         'modality' => $line->modality, 'numbers' => $line->numbers, 'amount_minor' => $line->prize_minor,
                     ])->values()->all(),
                 ],
