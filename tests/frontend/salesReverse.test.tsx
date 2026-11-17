@@ -317,10 +317,9 @@ test('Duplicar permite completar los destinos de ambos tipos dentro de la modal 
     await user.click(screen.getByRole('checkbox', {name:'Copiar en Sorteo 1'}));
     await user.click(screen.getByRole('button', {name:'Cargar jugadas'}));
     await screen.findByText('Selecciona al menos una pareja de súper palé para copiar esas jugadas.');
-    await user.click(screen.getByRole('combobox', {name:'Primer sorteo de destino'}));
-    await user.click(await screen.findByRole('option', {name:'Sorteo 1', exact:true}));
-    await user.click(screen.getByRole('combobox', {name:'Segundo sorteo de destino'}));
-    await user.click(await screen.findByRole('option', {name:'Sorteo 2', exact:true}));
+    const picker = screen.getByRole('group', {name:'Seleccionar pareja de destino'});
+    await user.click(within(picker).getByRole('button', {name:'Sorteo 1', exact:true}));
+    await user.click(within(picker).getByRole('button', {name:'Sorteo 2', exact:true}));
     await user.click(screen.getByRole('button', {name:'Cargar jugadas'}));
     await waitFor(()=>expect(draftLines()).toHaveLength(2));
 });
@@ -659,23 +658,22 @@ test('Ligar toma todos los bloques por defecto y puede limitar los números a un
     for (const play of ['07','1020','304050']) await enterPlay(user,play);
     await user.click(screen.getByRole('button', {name:/Ligar números/}));
     const dialog = await screen.findByRole('dialog');
-    const source = within(dialog).getByRole('combobox', {name:'Tomar números de'});
-    expect((source as HTMLInputElement).value).toBe('Todos los bloques');
+    const source = within(dialog).getByRole('group', {name:'Tomar números de'});
+    expect(within(source).getByRole('button', {name:'Todos los bloques'}).getAttribute('aria-pressed')).toBe('true');
     for (const number of ['07','10','20','30','40','50']) expect(within(dialog).getByRole('button', {name:number,exact:true})).toBeTruthy();
-    await user.click(source);
-    await user.click(await screen.findByRole('option', {name:'Palé / Súper palé',exact:true}));
+    await user.click(within(source).getByRole('button', {name:'Palé / Súper palé',exact:true}));
     expect(within(dialog).getByRole('button', {name:'10',exact:true})).toBeTruthy();
     expect(within(dialog).getByRole('button', {name:'20',exact:true})).toBeTruthy();
     expect(within(dialog).queryByRole('button', {name:'07',exact:true})).toBeNull();
     expect(within(dialog).queryByRole('button', {name:'30',exact:true})).toBeNull();
-    await user.click(source);
-    await user.click(await screen.findByRole('option', {name:'Tripleta',exact:true}));
+    await user.click(within(source).getByRole('button', {name:'Tripleta',exact:true}));
     expect(within(dialog).getByRole('button', {name:'30',exact:true})).toBeTruthy();
     expect(within(dialog).queryByRole('button', {name:'10',exact:true})).toBeNull();
     await user.click(within(dialog).getByRole('button', {name:'Cancelar',exact:true}));
     await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
     await user.click(screen.getByRole('button', {name:/Ligar números/}));
-    expect((await screen.findByRole('combobox', {name:'Tomar números de'}) as HTMLInputElement).value).toBe('Todos los bloques');
+    const resetSource = await screen.findByRole('group', {name:'Tomar números de'});
+    expect(within(resetSource).getByRole('button', {name:'Todos los bloques'}).getAttribute('aria-pressed')).toBe('true');
 });
 
 test('Ligar genera súper palés solo en las parejas elegidas, verifica cupo y limpia las combinaciones completadas', async () => {

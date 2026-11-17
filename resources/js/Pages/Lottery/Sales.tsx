@@ -792,19 +792,22 @@ function SalesWorkspace({
                 setRandomOpen(false);
                 void add(candidates);
             }} />}
-            <Modal show={combineOpen} closeable={!checkingCombinations} onClose={() => setCombineOpen(false)} maxWidth="2xl">
-                <form className="flex h-[min(700px,90dvh)] flex-col overflow-hidden p-3 text-slate-900 dark:text-slate-100" onSubmit={e => { e.preventDefault(); void combine(); }}>
+            <Modal show={combineOpen} closeable={!checkingCombinations} onClose={() => setCombineOpen(false)} maxWidth="7xl">
+                <form className="flex h-[min(820px,calc(100dvh-5rem))] flex-col overflow-hidden p-3 sm:p-4 text-slate-900 dark:text-slate-100" onSubmit={e => { e.preventDefault(); void combine(); }}>
                     <fieldset disabled={checkingCombinations} className="contents">
                     <div className="mb-2 flex shrink-0 items-center gap-2"><Shuffle className="h-6 w-6 text-emerald-600" /><h2 className="flex-1 text-lg font-semibold">Ligar números</h2><button type="button" className={secondary} aria-label="Cerrar" onClick={() => setCombineOpen(false)}><X className="h-4 w-4" /></button></div>
-                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                    <div className="mb-2 shrink-0"><Field label="Tomar números de"><ComboboxSelect className={input} value={combineSource} onChange={e => { setCombineSource(e.target.value); setChosenNumbers(numbersFromPanel(e.target.value)); setCombineError(''); setCombinePreview(null); }}>
-                        <option value="all">Todos los bloques</option><option value="quiniela">Quiniela</option><option value="pale">Palé / Súper palé</option><option value="tripleta">Tripleta</option><option value="super_pale">Solo súper palé</option>
-                    </ComboboxSelect></Field></div>
-                    <div className="my-1 flex shrink-0 flex-nowrap gap-1 overflow-x-auto">
+                    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-width:thin]">
+                    <div className="mb-2 shrink-0 space-y-1 text-sm">
+                        <span className="font-medium text-slate-600 dark:text-slate-300">Tomar números de</span>
+                        <div role="group" aria-label="Tomar números de" className="grid grid-cols-2 gap-1 sm:grid-cols-5">
+                            {([['all', 'Todos los bloques'], ['quiniela', 'Quiniela'], ['pale', 'Palé / Súper palé'], ['tripleta', 'Tripleta'], ['super_pale', 'Solo súper palé']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={combineSource === value} className={`rounded-md border px-2 py-2 text-xs font-semibold transition-colors ${combineSource === value ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800'}`} onClick={() => { setCombineSource(value); setChosenNumbers(numbersFromPanel(value)); setCombineError(''); setCombinePreview(null); }}>{label}</button>)}
+                        </div>
+                    </div>
+                    <div className="my-1 flex max-h-24 shrink-0 flex-wrap gap-1 overflow-y-auto">
                         {panelCombineNumbers.map(n => <button key={n} type="button" aria-pressed={combineNumbers.includes(n)} className={`rounded-lg border px-2 py-1 font-mono ${combineNumbers.includes(n) ? "border-emerald-600 bg-emerald-100 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100" : "border-slate-300 dark:border-slate-700"}`} onClick={() => { setChosenNumbers(current => current.includes(n) ? current.filter(v => v !== n) : [...current, n]); setCombinePreview(null); }}>{n}</button>)}
                     </div>
                     <div className="mb-2 flex shrink-0 gap-2"><button type="button" className={secondary} onClick={() => { setChosenNumbers(panelCombineNumbers); setCombinePreview(null); }}>Seleccionar todos</button><button type="button" className={secondary} onClick={() => { setChosenNumbers([]); setCombinePreview(null); }}>Limpiar selección</button></div>
-                    <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="grid shrink-0 grid-cols-1 gap-2">
                         <div className="min-w-0 space-y-1 text-sm">
                             <span className="font-medium text-slate-600 dark:text-slate-300">Quiero generar</span>
                             <div role="group" aria-label="Modalidad de combinaciones" className="grid grid-cols-4 gap-1">
@@ -812,11 +815,11 @@ function SalesWorkspace({
                             </div>
                         </div>
                         <Field label={combineMode === 'super_pale' ? 'Monto por jugada y pareja' : 'Monto por jugada y sorteo'}><MoneyInput className={input} inputMode="decimal" value={combineAmount} onValueChange={value => { setCombineAmount(value); setCombinePreview(null); }} /></Field>
-                        <p className="rounded-lg bg-slate-50 p-2 text-xs dark:bg-slate-800 sm:col-span-2">{Math.max(0, combinationCount)} combinaciones × {combinationDestinations} {combineMode === 'super_pale' ? 'parejas seleccionadas' : 'sorteos seleccionados'}. Se conservan las jugadas actuales y se omiten las combinaciones que ya están agregadas.</p>
+                        <p className="rounded-lg bg-slate-50 p-2 text-xs dark:bg-slate-800">{Math.max(0, combinationCount)} combinaciones × {combinationDestinations} {combineMode === 'super_pale' ? 'parejas seleccionadas' : 'sorteos seleccionados'}. Se conservan las jugadas actuales y se omiten las combinaciones que ya están agregadas.</p>
                         {combineNumbers.length < combinationSize && <p className="text-sm text-amber-700 dark:text-amber-300">Necesitas {combinationSize} números distintos; tienes {combineNumbers.length}.</p>}
                         {combineError && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{combineError}</p>}
                     </div>
-                    <div className="mt-2 min-h-0 flex-1 overflow-auto text-sm [scrollbar-width:thin] dark:[scrollbar-color:#475569_#0f172a]">
+                    <div className="mt-2 min-h-48 flex-1 shrink-0 overflow-auto text-sm [scrollbar-width:thin] dark:[scrollbar-color:#475569_#0f172a]">
                         {combineMode === 'super_pale' && <div className="mb-3"><SuperPairTargets draws={superDraws} pairs={superPairs} isEnabled={pairEnabled} onChange={setSuperPairs} disabled={checkingCombinations} /></div>}
                         <p className="mb-2 font-medium">Combinaciones a agregar</p>
                         <div className="flex flex-wrap gap-2">{(() => {
