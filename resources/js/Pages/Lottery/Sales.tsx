@@ -359,6 +359,15 @@ function SalesWorkspace({
                     }
                     return updated;
                 });
+                const completedPairs = new Set(accepted.filter(line => line.modality === 'super_pale').map(line => `${line.draw_id}-${line.second_draw_id}`));
+                for (const line of generated) {
+                    if (!accepted.includes(line)) completedPairs.delete(`${line.draw_id}-${line.second_draw_id}`);
+                }
+                if (completedPairs.size) {
+                    setSuperPairs(pairs => pairs.filter(([first, second]) => !completedPairs.has(`${first}-${second}`)));
+                    setPairStart(null);
+                    setPairError('');
+                }
                 setNumbers("");
                 requestKey.current = requestId();
             }
@@ -923,7 +932,7 @@ function SalesWorkspace({
                 </form>
             </Modal>
             {ticket && <IssuedTicketModal key={ticket.reference ?? ticket.code} ticket={ticket} draws={draws} branch={branch} currency={currency} onClose={() => { setTicket(null); requestAnimationFrame(() => numbersRef.current?.focus()); }} />}
-            <div className={`grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-2 ${superPale ? 'grid-cols-[minmax(0,1fr)_260px] md:grid-cols-[minmax(0,1fr)_320px] lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px] 2xl:grid-cols-[minmax(0,1fr)_440px]' : 'grid-cols-[minmax(0,1fr)_240px] md:grid-cols-[minmax(0,1fr)_300px] xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]'}`}>
+            <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-2 grid-cols-[minmax(0,1fr)_260px] md:grid-cols-[minmax(0,1fr)_320px] lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px] 2xl:grid-cols-[minmax(0,1fr)_440px]">
             <section aria-label="Selección de sorteos" className={`${panel} !p-2 col-start-2 row-start-1 row-span-2 flex min-h-0 flex-col`}>
                 <div className="mb-2 grid shrink-0 gap-2 border-b border-slate-200 pb-2 dark:border-slate-700" role="group" aria-label="Modalidad y selección de sorteos">
                     <div className="flex items-center justify-between gap-2">
@@ -943,7 +952,7 @@ function SalesWorkspace({
                     </>}
                     {superPale && pairError && <p role="alert" className="text-xs text-amber-700 dark:text-amber-400">{pairError}</p>}
                 </div>
-                <div tabIndex={0} aria-label="Sorteos disponibles" className={`grid min-h-0 flex-[3_1_0%] auto-rows-max content-start gap-1.5 overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin] [scrollbar-color:#94a3b8_#f1f5f9] dark:[scrollbar-color:#475569_#0f172a] ${superPale ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                <div tabIndex={0} aria-label="Sorteos disponibles" className="grid min-h-0 flex-[3_1_0%] grid-cols-2 auto-rows-max content-start gap-1.5 overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin] [scrollbar-color:#94a3b8_#f1f5f9] dark:[scrollbar-color:#475569_#0f172a]">
                     {draws
                         .filter((d: Draw) => isOpen(d.id) && (superPale ? d.modalities.includes('super_pale') : (lotteryFilter === null || d.lottery_id === lotteryFilter) && (!selectedOnly || selected.includes(d.id))))
                         .sort((a: Draw, b: Draw) => getWindow(a).close - getWindow(b).close || a.closes_at.localeCompare(b.closes_at) || a.name.localeCompare(b.name, "es") || a.id - b.id)
