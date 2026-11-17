@@ -230,7 +230,7 @@ class LotteryController extends Controller
 
         $data = $r->validate(['scope' => ['required', Rule::in(['office', 'branch'])], 'currency' => ['required', Rule::in(['DOP', 'USD', 'EUR', 'HTG'])],
 
-            'settings' => 'present|array:payment_methods,payment_method_labels,payment_reference_required,reconciliation_mode,daily_limit_minor,consortium_limit_minor,cancel_minutes,reprint_minutes,show_qr,abbreviate_draw_names,copy_consortium_tickets,discount_enabled,discount_every_minor,discount_amount_minor,footer,draw_ids,general_rules,rules,pairs,super_pale',
+            'settings' => 'present|array:payment_methods,payment_method_labels,payment_reference_required,reconciliation_mode,daily_limit_minor,consortium_limit_minor,cancel_minutes,reprint_minutes,show_qr,abbreviate_draw_names,copy_consortium_tickets,ticket_copy_mode,discount_enabled,discount_every_minor,discount_amount_minor,footer,draw_ids,general_rules,rules,pairs,super_pale',
 
             'settings.payment_methods' => 'nullable|array|list|min:1|max:100',
             'settings.payment_methods.*' => ['required', 'string', 'regex:/^(cash|transfer|card|deposit|custom_[a-f0-9]{12})$/D', 'distinct'],
@@ -246,6 +246,7 @@ class LotteryController extends Controller
 
             'settings.show_qr' => 'nullable|boolean', 'settings.discount_enabled' => 'nullable|boolean',
             'settings.copy_consortium_tickets' => 'nullable|boolean',
+            'settings.ticket_copy_mode' => 'nullable|in:original,selected',
             'settings.abbreviate_draw_names' => 'nullable|boolean',
 
             'settings.discount_every_minor' => 'nullable|integer|min:1|max:999999999', 'settings.discount_amount_minor' => 'nullable|integer|min:0|max:999999999',
@@ -711,6 +712,7 @@ class LotteryController extends Controller
 
         return response()->json([
             'reference' => $ticket->reference, 'source_branch' => $source->code,
+            'copy_mode' => $settings['ticket_copy_mode'],
             'lines' => $ticket->lines()->get(['draw_id', 'second_draw_id', 'modality', 'numbers', 'amount_minor']),
         ])->header('Cache-Control', 'no-store, private');
     }

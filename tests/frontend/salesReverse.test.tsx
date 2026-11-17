@@ -267,8 +267,75 @@ test('Duplicar puede consultar el consorcio y muestra la banca de origen antes d
     await screen.findByText('Ticket T-000012 · Banca OTRA · 1 jugada encontrada');
     expect(draftLines()).toEqual([]);
     await user.click(screen.getByRole('button', { name: 'Cargar jugadas' }));
-    await screen.findByText('Ticket cargado. Al vender se comprobarán las reglas actuales.');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(draftLines()[0].numbers).toBe('07');
+});
+
+test('Duplicar en destinos seleccionados separa regulares y súper palés y no repite las jugadas del original', async () => {
+    vi.mocked(axios.get).mockImplementation(async url => String(url).startsWith('/lottery/copy-ticket/') ? {data:{
+        reference:'T-000012', copy_mode:'selected', lines:[
+            {draw_id:91, modality:'quiniela', numbers:'07', amount_minor:250},
+            {draw_id:92, modality:'quiniela', numbers:'07', amount_minor:250},
+            {draw_id:91, second_draw_id:92, modality:'super_pale', numbers:'10-20', amount_minor:300},
+        ],
+    }} : {data:{current:{id:1}}});
+    const user = await mount({1:superModalities, 2:superModalities}, {ticket_copy_mode:'selected', pairs:{'1-2':{enabled:true}}});
+    await user.click(screen.getByRole('button', {name:/^Sorteo 2/}));
+    await user.click(screen.getByRole('checkbox', {name:'Súper palé'}));
+    await choosePair(user,1,2);
+    await user.click(screen.getByRole('button', {name:'Duplicar F4'}));
+    await user.type(await screen.findByLabelText('Número del ticket'), '12');
+    await user.keyboard('{Enter}');
+    await screen.findByText('Copiar en los sorteos seleccionados');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText('Jugada', {exact:true})));
+    expect(draftLines()).toEqual([
+        {draw_id:2, modality:'quiniela', numbers:'07', amount:'2.50'},
+        {draw_id:1, second_draw_id:2, modality:'super_pale', numbers:'10-20', amount:'3.00'},
+    ]);
+    expect(axios.post).not.toHaveBeenCalled();
+    const saved = JSON.parse(sessionStorage.getItem(storageKey)!);
+    expect(saved.drafts.find((draft:any)=>draft.id===saved.activeId)).toMatchObject({selected:[2], superPairs:[]});
+});
+
+test('Duplicar permite completar los destinos de ambos tipos dentro de la modal antes de reemplazar el ticket', async () => {
+    vi.mocked(axios.get).mockImplementation(async url => String(url).startsWith('/lottery/copy-ticket/') ? {data:{
+        reference:'T-000012', copy_mode:'selected', lines:[
+            {draw_id:91, modality:'quiniela', numbers:'07', amount_minor:250},
+            {draw_id:91, second_draw_id:92, modality:'super_pale', numbers:'10-20', amount_minor:300},
+        ],
+    }} : {data:{current:{id:1}}});
+    const user = await mount({1:superModalities, 2:superModalities}, {ticket_copy_mode:'selected', pairs:{'1-2':{enabled:true}}});
+    await user.click(screen.getByRole('button', {name:'Duplicar F4'}));
+    await user.type(await screen.findByLabelText('Número del ticket'), '12');
+    await user.keyboard('{Enter}');
+    await screen.findByText('Copiar en los sorteos seleccionados');
+    await user.click(screen.getByRole('button', {name:'Cargar jugadas'}));
+    await screen.findByText('Selecciona al menos un sorteo regular para copiar las jugadas regulares.');
+    expect(draftLines()).toEqual([]);
+    await user.click(screen.getByRole('checkbox', {name:'Copiar en Sorteo 1'}));
+    await user.click(screen.getByRole('button', {name:'Cargar jugadas'}));
+    await screen.findByText('Selecciona al menos una pareja de súper palé para copiar esas jugadas.');
+    await user.click(screen.getByRole('combobox', {name:'Primer sorteo de destino'}));
+    await user.click(await screen.findByRole('option', {name:'Sorteo 1', exact:true}));
+    await user.click(screen.getByRole('combobox', {name:'Segundo sorteo de destino'}));
+    await user.click(await screen.findByRole('option', {name:'Sorteo 2', exact:true}));
+    await user.click(screen.getByRole('button', {name:'Cargar jugadas'}));
+    await waitFor(()=>expect(draftLines()).toHaveLength(2));
+});
+
+test('Súper palé oculta sorteos incompatibles y sin parejas habilitadas y comparte las tarjetas compactas con regulares', async () => {
+    const user = await mount({1:superModalities,2:superModalities,3:superModalities,4:['quiniela']}, {pairs:{'1-2':{enabled:true},'2-3':{enabled:false}}});
+    const regularClasses = screen.getByRole('button', {name:/^Sorteo 1/}).className;
+    await user.click(screen.getByRole('checkbox', {name:'Súper palé'}));
+    expect(screen.getByRole('button', {name:/^Sorteo 1/}).className).toBe(regularClasses);
+    expect(screen.getByRole('button', {name:/^Sorteo 2/})).toBeTruthy();
+    expect(screen.queryByRole('button', {name:/^Sorteo 3/})).toBeNull();
+    expect(screen.queryByRole('button', {name:/^Sorteo 4/})).toBeNull();
+    await user.click(screen.getByRole('checkbox', {name:'Súper palé'}));
+    expect(screen.getByRole('button', {name:/^Sorteo 3/})).toBeTruthy();
+    expect(screen.getByRole('button', {name:/^Sorteo 4/})).toBeTruthy();
 });
 
 test.each(['12', 'T-000012', '#12'])('Duplicar por número %s consulta en la banca actual y carga solo al confirmar', async reference => {
@@ -283,8 +350,6 @@ test.each(['12', 'T-000012', '#12'])('Duplicar por número %s consulta en la ban
     expect(axios.get).toHaveBeenCalledWith(`/lottery/copy-ticket/T-${reference === 'T-000012' ? '000012' : '12'}`, expect.objectContaining({ params: { branch_id: 1 } }));
     expect(draftLines()).toEqual([]);
     await user.click(screen.getByRole('button', { name: 'Cargar jugadas' }));
-    await screen.findByText('Ticket cargado. Al vender se comprobarán las reglas actuales.');
-    await user.click(screen.getByRole('button', { name: 'Entendido' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(draftLines()).toEqual([{ draw_id: 1, second_draw_id: null, modality: 'quiniela', numbers: '07', amount: '2.50' }]);
     expect(axios.post).not.toHaveBeenCalled();
@@ -586,6 +651,55 @@ test('Ligar informa cuando ningún sorteo admite la modalidad y conserva el tick
     expect(screen.getByText(/No se agregaron nuevas jugadas/)).toBeTruthy();
     expect(draftLines()).toEqual(previous);
     expect(axios.post).not.toHaveBeenCalled();
+});
+
+test('Ligar toma todos los bloques por defecto y puede limitar los números a un panel', async () => {
+    const user = await mount();
+    await user.click(screen.getByRole('button', {name:/^Sorteo 1/}));
+    for (const play of ['07','1020','304050']) await enterPlay(user,play);
+    await user.click(screen.getByRole('button', {name:/Ligar números/}));
+    const dialog = await screen.findByRole('dialog');
+    const source = within(dialog).getByRole('combobox', {name:'Tomar números de'});
+    expect((source as HTMLInputElement).value).toBe('Todos los bloques');
+    for (const number of ['07','10','20','30','40','50']) expect(within(dialog).getByRole('button', {name:number,exact:true})).toBeTruthy();
+    await user.click(source);
+    await user.click(await screen.findByRole('option', {name:'Palé / Súper palé',exact:true}));
+    expect(within(dialog).getByRole('button', {name:'10',exact:true})).toBeTruthy();
+    expect(within(dialog).getByRole('button', {name:'20',exact:true})).toBeTruthy();
+    expect(within(dialog).queryByRole('button', {name:'07',exact:true})).toBeNull();
+    expect(within(dialog).queryByRole('button', {name:'30',exact:true})).toBeNull();
+    await user.click(source);
+    await user.click(await screen.findByRole('option', {name:'Tripleta',exact:true}));
+    expect(within(dialog).getByRole('button', {name:'30',exact:true})).toBeTruthy();
+    expect(within(dialog).queryByRole('button', {name:'10',exact:true})).toBeNull();
+    await user.click(within(dialog).getByRole('button', {name:'Cancelar',exact:true}));
+    await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
+    await user.click(screen.getByRole('button', {name:/Ligar números/}));
+    expect((await screen.findByRole('combobox', {name:'Tomar números de'}) as HTMLInputElement).value).toBe('Todos los bloques');
+});
+
+test('Ligar genera súper palés solo en las parejas elegidas, verifica cupo y limpia las combinaciones completadas', async () => {
+    const user = await mount({1:superModalities,2:superModalities,3:superModalities}, {pairs:{'1-2':{enabled:true},'1-3':{enabled:true}}});
+    await user.click(screen.getByRole('button', {name:/^Sorteo 1/}));
+    for (const number of ['02','11','25']) await enterPlay(user,number);
+    const previous = draftLines();
+    await user.click(screen.getByRole('checkbox', {name:'Súper palé'}));
+    await choosePair(user,1,2); await choosePair(user,1,3);
+    await user.click(screen.getByRole('button', {name:/Ligar números/}));
+    const group = await screen.findByRole('group', {name:'Modalidad de combinaciones'});
+    await user.click(within(group).getByRole('button', {name:'Súper palé',exact:true}));
+    vi.mocked(axios.post).mockClear().mockImplementation(async (_url, data:any)=>({data:{available_minor:data.second_draw_id===3?0:null}}));
+    await user.click(screen.getByRole('button', {name:'Agregar combinaciones'}));
+    await screen.findByText('Sorteos y jugadas omitidos');
+    expect(draftLines().slice(0,3)).toEqual(previous);
+    expect(draftLines().slice(3).map((line:any)=>[line.draw_id,line.second_draw_id,line.modality,line.numbers])).toEqual([
+        [1,2,'super_pale','02-11'],[1,2,'super_pale','02-25'],[1,2,'super_pale','11-25'],
+    ]);
+    expect(axios.post).toHaveBeenCalledTimes(6);
+    await user.click(screen.getByRole('button', {name:'Entendido'}));
+    await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('heading', {name:'Combinaciones a jugar · 1'})).toBeTruthy();
+    expect(screen.getByRole('button', {name:'Quitar pareja Sorteo 1 + Sorteo 3'})).toBeTruthy();
 });
 
 test('Alt+A abre Aleatorio en la primera cantidad y respeta las modales abiertas', async () => {

@@ -7,7 +7,7 @@ import BranchOverrides from '../../resources/js/Pages/Lottery/BranchOverrides';
 vi.mock('@/Components/Modal', () => ({ default: ({ show, children }: any) => show ? <div role="dialog">{children}</div> : null }));
 afterEach(cleanup);
 
-const parent = { footer: 'Pie del consorcio', show_qr: true, payment_methods: ['cash'], reconciliation_mode: 'cash', general_rules: { quiniela: { commission_bps: 1000, payouts: { 1: 60 } } } };
+const parent = { footer: 'Pie del consorcio', show_qr: true, payment_methods: ['cash'], reconciliation_mode: 'cash', ticket_copy_mode: 'original', general_rules: { quiniela: { commission_bps: 1000, payouts: { 1: 60 } } } };
 function Editor({ initial, permissions }: { initial: any; permissions?: string[] }) {
     const [settings, setSettings] = useState(initial);
     return <><BranchOverrides settings={settings} parent={parent} draws={[]} currency="DOP" disabled={false} can={permission => !permissions || permissions.includes(permission)} errors={{}} onChange={setSettings} /><output data-testid="settings">{JSON.stringify(settings)}</output></>;
@@ -20,6 +20,14 @@ test('muestra las excepciones y permite quitar una conservando las demás', () =
     fireEvent.click(screen.getByRole('button', { name: 'Heredar Pie del ticket' }));
     expect(JSON.parse(screen.getByTestId('settings').textContent!)).toEqual({ show_qr: false });
     expect(screen.queryByText('Pie propio')).toBeNull();
+});
+
+test('la forma de copiar tickets muestra los destinos propios y permite volver a heredar', () => {
+    render(<Editor initial={{ticket_copy_mode:'selected'}} />);
+    expect(screen.getByText('Sorteos seleccionados')).toBeTruthy();
+    expect(screen.getByText('Sorteos originales')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', {name:'Heredar Cómo copiar tickets'}));
+    expect(JSON.parse(screen.getByTestId('settings').textContent!)).toEqual({});
 });
 
 test('respeta los permisos de medios de cobro y forma de cuadre al heredar', () => {

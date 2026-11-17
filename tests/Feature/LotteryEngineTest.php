@@ -1093,7 +1093,8 @@ class LotteryEngineTest extends TestCase
         $settings['copy_consortium_tickets'] = true;
         $this->office->update(['lottery_settings' => $settings]);
         $response = $this->getJson($url)->assertOk()->assertJsonPath('source_branch', 'COPY')->assertJsonPath('lines.0.numbers', '10');
-        $this->assertSame(['reference', 'source_branch', 'lines'], array_keys($response->json()));
+        $this->assertSame(['reference', 'source_branch', 'copy_mode', 'lines'], array_keys($response->json()));
+        $this->assertSame('original', $response->json('copy_mode'));
         $this->assertSame(['draw_id', 'second_draw_id', 'modality', 'numbers', 'amount_minor'], array_keys($response->json('lines.0')));
         $this->getJson('/lottery/tickets/'.$otherTicket->reference)->assertNotFound();
         $this->branch->update(['lottery_settings' => ['copy_consortium_tickets' => false]]);
@@ -1111,6 +1112,31 @@ class LotteryEngineTest extends TestCase
         $this->seller->roles()->detach();
         $this->seller->unsetRelation('roles');
         $this->getJson('/lottery/copy-ticket/'.$ticket->reference)->assertForbidden();
+    }
+
+    public function test_ticket_copy_mode_defaults_inherits_and_allows_scoped_bank_overrides(): void
+    {
+        $config = app(Configuration::class);
+        $ticket = $this->sell();
+        $this->assertSame('original', $config->effective($this->branch)['ticket_copy_mode']);
+        $this->actingAs($this->seller);
+        $settings = [...$this->office->lottery_settings, 'ticket_copy_mode' => 'selected'];
+        $this->postJson('/lottery/settings', ['scope'=>'office', 'currency'=>'DOP', 'settings'=>$settings])->assertRedirect();
+        $this->assertSame('selected', $config->effective($this->branch->fresh())['ticket_copy_mode']);
+        $this->getJson('/lottery/copy-ticket/'.$ticket->reference)->assertOk()->assertJsonPath('copy_mode', 'selected')->assertJsonMissingPath('payment_pin');
+        $this->postJson('/lottery/settings', ['scope'=>'branch', 'branch_id'=>$this->branch->id, 'currency'=>'DOP', 'settings'=>['ticket_copy_mode'=>'original']])->assertRedirect();
+        $this->assertSame('original', $config->effective($this->branch->fresh())['ticket_copy_mode']);
+        $this->getJson('/lottery/copy-ticket/'.$ticket->code)->assertOk()->assertJsonPath('copy_mode', 'original');
+        $this->postJson('/lottery/settings', ['scope'=>'branch', 'branch_id'=>$this->branch->id, 'currency'=>'DOP', 'settings'=>[]])->assertRedirect();
+        $this->assertSame('selected', $config->effective($this->branch->fresh())['ticket_copy_mode']);
+        $this->postJson('/lottery/settings', ['scope'=>'branch', 'branch_id'=>$this->branch->id, 'currency'=>'DOP', 'settings'=>['ticket_copy_mode'=>'invalid']])->assertUnprocessable()->assertJsonValidationErrors('settings.ticket_copy_mode');
+        $foreign = Office::create(['name'=>'Ajeno', 'currency'=>'DOP', 'is_active'=>true]);
+        $this->postJson('/lottery/settings', ['scope'=>'office', 'office_id'=>$foreign->id, 'currency'=>'DOP', 'settings'=>['ticket_copy_mode'=>'selected']])->assertForbidden();
+        $permission = \App\Models\Permission::where('slug', 'lottery.settings')->firstOrFail();
+        foreach (Role::all() as $role) $role->permissions()->detach($permission->id);
+        $this->seller->unsetRelation('roles');
+        $this->postJson('/lottery/settings', ['scope'=>'branch', 'branch_id'=>$this->branch->id, 'currency'=>'DOP', 'settings'=>['ticket_copy_mode'=>'original']])->assertForbidden();
+        $this->assertSame('selected', $config->effective($this->branch->fresh())['ticket_copy_mode']);
     }
 
     public function test_general_tariffs_respect_draw_exceptions_and_independent_bank_values(): void

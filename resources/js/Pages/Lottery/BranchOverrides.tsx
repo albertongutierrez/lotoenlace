@@ -21,6 +21,7 @@ const labels: Record<string, string> = {
     discount_enabled: 'Descuento habilitado', discount_every_minor: 'Descuento por cada monto jugado', discount_amount_minor: 'Monto del descuento',
     footer: 'Pie del ticket', show_qr: 'QR del ticket', draw_ids: 'Sorteos habilitados', reconciliation_mode: 'Forma de cuadre',
     copy_consortium_tickets: 'Copiar tickets del consorcio',
+    ticket_copy_mode: 'Cómo copiar tickets',
     abbreviate_draw_names: 'Abreviaturas de sorteos en ventas',
     payment_methods: 'Medios de cobro y referencias', payment_method_labels: 'Nombres de los medios de cobro',
     commission_bps: 'Comisión', payouts: 'Premios', enabled: 'Habilitación', ordered: 'Números asignados por sorteo', primary_draw_id: 'Sorteo base',
@@ -56,6 +57,7 @@ export default function BranchOverrides({ settings, parent, draws, currency, dis
         if (field.endsWith('_minor')) return money(value, currency);
         if (field.endsWith('_minutes')) return `${value} minutos`;
         if (field === 'reconciliation_mode') return value === 'report' ? 'Cuadre por reporte' : 'Cajas';
+        if (field === 'ticket_copy_mode') return value === 'selected' ? 'Sorteos seleccionados' : 'Sorteos originales';
         if (field === 'primary_draw_id') return drawLabel(value);
         if (field === 'draw_ids') return <details><summary className="cursor-pointer">{value.length} sorteos</summary><ul className="mt-2 space-y-1">{value.map((id: number) => <li key={id}>{drawLabel(id)}</li>)}</ul></details>;
         if (field === 'payouts') {

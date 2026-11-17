@@ -288,6 +288,14 @@ export default function Settings({
                                 </ComboboxSelect>
                             </Field>
                         ))}
+                        <Field label="Cómo copiar tickets">
+                            <ComboboxSelect className={input} value={settings.ticket_copy_mode ?? 'inherit'} onChange={e => e.target.value === 'inherit' ? inherit('ticket_copy_mode') : update('ticket_copy_mode', e.target.value)}>
+                                <option value="inherit">{scope === 'branch' ? 'Heredar del consorcio' : 'Predeterminado'} · {parent.ticket_copy_mode === 'selected' ? 'Sorteos seleccionados' : 'Sorteos originales'}</option>
+                                <option value="selected">Copiar en los sorteos seleccionados</option>
+                                <option value="original">Copiar en los sorteos originales</option>
+                            </ComboboxSelect>
+                            <p className="mt-1 text-xs text-slate-500">La selección usa sorteos regulares y parejas de súper palé por separado. Las reglas y límites se validan al vender.</p>
+                        </Field>
                         <Field label="Pie de ticket">
                             <textarea
                                 className={input}

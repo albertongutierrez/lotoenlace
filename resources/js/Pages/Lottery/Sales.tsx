@@ -10,6 +10,8 @@ import ReprintTicketModal from "./ReprintTicketModal";
 import PrinterSettingsModal from "./PrinterSettingsModal";
 import IssuedTicketModal from "./IssuedTicketModal";
 import { newPlays, playIdentity } from "@/lib/playIdentity";
+import { copyToSelected, ticketCopyTemplates } from '@/lib/ticketCopy';
+import SuperPairTargets from './SuperPairTargets';
 import TicketActionsModal from "./TicketActionsModal";
 import WinnersModal from "./WinnersModal";
 import Modal from "@/Components/Modal";
@@ -227,6 +229,13 @@ function SalesWorkspace({
     const pairEnabled = ([first, second]: SuperPair) => first !== second &&
         [first, second].every(id => isOpen(id) && draws.find((d: Draw) => d.id === id)?.modalities.includes('super_pale')) &&
         !!settings.pairs?.[`${Math.min(first, second)}-${Math.max(first, second)}`]?.enabled;
+    const superDrawIds = new Set<number>();
+    for (const [key, rule] of Object.entries(settings.pairs ?? {}) as [string, {enabled?: boolean}][]) {
+        if (!rule.enabled) continue;
+        const pair = key.split('-').map(Number) as SuperPair;
+        if (pairEnabled(pair)) pair.forEach(id => superDrawIds.add(id));
+    }
+    const superDraws = draws.filter((draw: Draw) => superDrawIds.has(draw.id)).map((draw: Draw) => ({id: draw.id, name: nameForDraw(draw.id)}));
     const chooseSuperDraw = (id: number) => {
         setPairError('');
         if (pairStart === null) { setPairStart(id); return; }
@@ -318,6 +327,18 @@ function SalesWorkspace({
         }));
     };
     const [repeatedPlay, setRepeatedPlay] = useState<Line[] | null>(null);
+    const clearCompletedPairs = (generated: Line[], accepted: Line[]) => {
+        const key = (line: Line) => [line.draw_id, line.second_draw_id ?? line.draw_id].sort((a, b) => a - b).join('-');
+        const completedPairs = new Set(accepted.filter(line => line.modality === 'super_pale').map(key));
+        for (const line of generated) {
+            if (!accepted.includes(line)) completedPairs.delete(key(line));
+        }
+        if (completedPairs.size) {
+            setSuperPairs(pairs => pairs.filter(([first, second]) => !completedPairs.has(`${first}-${second}`)));
+            setPairStart(null);
+            setPairError('');
+        }
+    };
     const add = async (confirmed?: Line[]) => {
         if (checkingRef.current || busy) return;
         checkingRef.current = true;
@@ -359,15 +380,7 @@ function SalesWorkspace({
                     }
                     return updated;
                 });
-                const completedPairs = new Set(accepted.filter(line => line.modality === 'super_pale').map(line => `${line.draw_id}-${line.second_draw_id}`));
-                for (const line of generated) {
-                    if (!accepted.includes(line)) completedPairs.delete(`${line.draw_id}-${line.second_draw_id}`);
-                }
-                if (completedPairs.size) {
-                    setSuperPairs(pairs => pairs.filter(([first, second]) => !completedPairs.has(`${first}-${second}`)));
-                    setPairStart(null);
-                    setPairError('');
-                }
+                clearCompletedPairs(generated, accepted);
                 setNumbers("");
                 requestKey.current = requestId();
             }
@@ -503,6 +516,9 @@ function SalesWorkspace({
     const [duplicating, setDuplicating] = useState(false);
     const [duplicateSource, setDuplicateSource] = useState<Line[] | null>(null);
     const [duplicateTargets, setDuplicateTargets] = useState<Record<number, number>>( {} );
+    const [duplicateMode, setDuplicateMode] = useState(settings.ticket_copy_mode ?? 'original');
+    const [duplicateAmounts, setDuplicateAmounts] = useState<Record<string, string>>({});
+    const duplicateTemplates = ticketCopyTemplates(duplicateSource ?? []);
     const duplicate = async () => {
         if (duplicateBusyRef.current) return;
         let code = duplicateCode.trim();
@@ -518,7 +534,7 @@ function SalesWorkspace({
         try {
             if (!duplicateSource) {
             const data = await queryClient.fetchQuery({
-                queryKey: ["lottery", "copy-ticket", auth.user.id, branch.id, !!settings.copy_consortium_tickets, code],
+                queryKey: ["lottery", "copy-ticket", auth.user.id, branch.id, !!settings.copy_consortium_tickets, settings.ticket_copy_mode ?? 'original', code],
                 staleTime: 0,
                 queryFn: async ({ signal }) => (await axios.get(
                     `/lottery/copy-ticket/${encodeURIComponent(code)}`,
@@ -535,18 +551,20 @@ function SalesWorkspace({
             if (!copied.length) throw Error("El ticket no tiene jugadas para copiar.");
             setDuplicateReference(`${data.reference ?? code}${data.source_branch ? ` · Banca ${data.source_branch}` : ''}`);
             setDuplicateSource(copied);
+            setDuplicateMode(data.copy_mode ?? settings.ticket_copy_mode ?? 'original');
+            setDuplicateAmounts({});
             const ids = Array.from(new Set<number>(copied.flatMap((line: Line) => [line.draw_id, ...(line.second_draw_id ? [line.second_draw_id] : [])])));
             setDuplicateTargets(Object.fromEntries(ids.map(id => [id, isOpen(id) ? id : 0])));
             return;
             }
-            const copied = duplicateSource.map(line => ({
+            const copied = duplicateMode === 'selected' ? copyToSelected(duplicateSource, selected, superPairs, duplicateAmounts) : duplicateSource.map(line => ({
                 ...line,
                 draw_id: duplicateTargets[line.draw_id],
                 ...(line.second_draw_id ? { second_draw_id: duplicateTargets[line.second_draw_id] } : {}),
             }));
             for (const line of copied) {
                 const ids = [line.draw_id, ...(line.second_draw_id ? [line.second_draw_id] : [])];
-                if (ids.some(id => !id || !isOpen(id))) throw Error("Selecciona un sorteo abierto para cada sorteo original.");
+                if (ids.some(id => !id || !isOpen(id))) throw Error(duplicateMode === 'selected' ? 'Los destinos seleccionados deben estar abiertos.' : "Selecciona un sorteo abierto para cada sorteo original.");
                 if (ids.some(id => !draws.find((d: Draw) => d.id === id)?.modalities.includes(line.modality)))
                     throw Error("Un sorteo de destino no acepta todas las modalidades del original.");
                 if (line.modality === "super_pale") {
@@ -555,23 +573,15 @@ function SalesWorkspace({
                     if (!settings.pairs?.[pair]?.enabled) throw Error("La pareja de destino no está habilitada para súper palé.");
                 }
             }
+            if (copied.length > 500) throw Error('Máximo 500 jugadas por ticket. Reduce los destinos seleccionados.');
             setLines(copied);
-            setSelected(
-                Array.from(
-                    new Set<number>(
-                        copied.flatMap((l: Line) => [
-                            l.draw_id,
-                            ...(l.second_draw_id ? [l.second_draw_id] : []),
-                        ]),
-                    ),
-                ),
-            );
+            if (duplicateMode === 'original') setSelected([...new Set(copied.filter(line => line.modality !== 'super_pale').map(line => line.draw_id))]);
+            clearCompletedPairs(copied, copied);
             requestKey.current = requestId();
-            setMessage(
-                "Ticket cargado. Al vender se comprobarán las reglas actuales.",
-            );
+            setMessage('');
             setDuplicateOpen(false);
             setDuplicateCode("");
+            setDuplicateSource(null);
         } catch (e: any) {
             setDuplicateError(e.response?.status === 404 ? `No encontramos ese ticket en ${settings.copy_consortium_tickets ? 'este consorcio' : 'esta banca'}. Revisa el número o código QR e intenta nuevamente.` : e.response?.data?.message ?? e.message ?? "No se pudo cargar el ticket.");
         } finally {
@@ -595,14 +605,18 @@ function SalesWorkspace({
     const [combineMode, setCombineMode] = useState("pale");
     const [combineAmount, setCombineAmount] = useState("");
     const [combineError, setCombineError] = useState("");
+    const [combineSource, setCombineSource] = useState('all');
+    const numbersFromPanel = (source: string) => Array.from(new Set(lines.filter(line => source === 'all' || line.modality === source || (source === 'pale' && line.modality === 'super_pale')).flatMap(line => line.numbers.split('-')))).sort();
     const allCombineNumbers = Array.from(new Set(lines.flatMap(line => line.numbers.split("-")))).sort();
+    const panelCombineNumbers = numbersFromPanel(combineSource);
     const [chosenNumbers, setChosenNumbers] = useState<string[]>([]);
-    const combineNumbers = chosenNumbers.filter(n => allCombineNumbers.includes(n)).sort();
+    const combineNumbers = chosenNumbers.filter(n => panelCombineNumbers.includes(n)).sort();
     const [combinePreview, setCombinePreview] = useState<{ line: Line; available: number | null; error: string }[] | null>(null);
     const [combineAddedCount, setCombineAddedCount] = useState(0);
     const combiningRef = useRef(false);
     const [checkingCombinations, setCheckingCombinations] = useState(false);
-    const combinationSize = combineMode === "quiniela" ? 1 : combineMode === "pale" ? 2 : 3;
+    const combinationSize = combineMode === 'quiniela' ? 1 : combineMode === 'tripleta' ? 3 : 2;
+    const combinationDestinations = combineMode === 'super_pale' ? superPairs.length : selected.length;
     const combinationCount = combinationSize === 1 ? combineNumbers.length : combinationSize === 2
         ? combineNumbers.length * (combineNumbers.length - 1) / 2
         : combineNumbers.length * (combineNumbers.length - 1) * (combineNumbers.length - 2) / 6;
@@ -615,15 +629,16 @@ function SalesWorkspace({
         setCheckingCombinations(true);
         try {
             if (combineNumbers.length < combinationSize) throw Error(`Necesitas al menos ${combinationSize} números distintos para generar ${modes[combineMode as keyof typeof modes]}.`);
-            if (!selected.length) throw Error("Selecciona los sorteos donde deseas agregar las combinaciones.");
-            const compatible = selected.filter(id => draws.find((d: Draw) => d.id === id)?.modalities.includes(combineMode));
-            const preview: { line: Line; available: number | null; error: string }[] = selected.filter(id => !compatible.includes(id)).map(draw_id => ({
+            const superMode = combineMode === 'super_pale';
+            if (!combinationDestinations) throw Error(superMode ? 'Selecciona al menos una pareja de súper palé.' : "Selecciona los sorteos donde deseas agregar las combinaciones.");
+            const compatible = superMode ? [] : selected.filter(id => draws.find((d: Draw) => d.id === id)?.modalities.includes(combineMode));
+            const preview: { line: Line; available: number | null; error: string }[] = (superMode ? [] : selected.filter(id => !compatible.includes(id))).map(draw_id => ({
                 line: { draw_id, modality: combineMode, numbers: "—", amount: combineAmount },
                 available: null,
                 error: `No admite ${modes[combineMode as keyof typeof modes]}; sorteo omitido.`,
             }));
-            if (!compatible.length) { setCombinePreview(preview); setCombineOpen(false); return; }
-            if (combinationCount * compatible.length + lines.length > 500) throw Error("Máximo 500 jugadas por ticket. Reduce las combinaciones o los sorteos seleccionados.");
+            if (!superMode && !compatible.length) { setCombinePreview(preview); setCombineOpen(false); return; }
+            if (combinationCount * (superMode ? superPairs.length : compatible.length) + lines.length > 500) throw Error("Máximo 500 jugadas por ticket. Reduce las combinaciones o los sorteos seleccionados.");
             const generated: Line[] = [];
             const append = (numbers: string[]) => generated.push(...makeLines(combineMode, numbers.join(""), combineAmount, compatible));
             for (let i = 0; i < combineNumbers.length; i++) {
@@ -649,6 +664,7 @@ function SalesWorkspace({
             const accepted = preview.filter(item => !item.error).map(item => item.line);
             setCombineAddedCount(accepted.length);
             setLines(current => [...current, ...newPlays(current, accepted)]);
+            clearCompletedPairs(fresh, accepted);
             requestKey.current = requestId();
             setCombinePreview(preview.filter(item => !!item.error));
             setCombineOpen(false);
@@ -781,23 +797,27 @@ function SalesWorkspace({
                     <fieldset disabled={checkingCombinations} className="contents">
                     <div className="mb-2 flex shrink-0 items-center gap-2"><Shuffle className="h-6 w-6 text-emerald-600" /><h2 className="flex-1 text-lg font-semibold">Ligar números</h2><button type="button" className={secondary} aria-label="Cerrar" onClick={() => setCombineOpen(false)}><X className="h-4 w-4" /></button></div>
                     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div className="mb-2 shrink-0"><Field label="Tomar números de"><ComboboxSelect className={input} value={combineSource} onChange={e => { setCombineSource(e.target.value); setChosenNumbers(numbersFromPanel(e.target.value)); setCombineError(''); setCombinePreview(null); }}>
+                        <option value="all">Todos los bloques</option><option value="quiniela">Quiniela</option><option value="pale">Palé / Súper palé</option><option value="tripleta">Tripleta</option><option value="super_pale">Solo súper palé</option>
+                    </ComboboxSelect></Field></div>
                     <div className="my-1 flex shrink-0 flex-nowrap gap-1 overflow-x-auto">
-                        {allCombineNumbers.map(n => <button key={n} type="button" aria-pressed={combineNumbers.includes(n)} className={`rounded-lg border px-2 py-1 font-mono ${combineNumbers.includes(n) ? "border-emerald-600 bg-emerald-100 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100" : "border-slate-300 dark:border-slate-700"}`} onClick={() => { setChosenNumbers(current => current.includes(n) ? current.filter(v => v !== n) : [...current, n]); setCombinePreview(null); }}>{n}</button>)}
+                        {panelCombineNumbers.map(n => <button key={n} type="button" aria-pressed={combineNumbers.includes(n)} className={`rounded-lg border px-2 py-1 font-mono ${combineNumbers.includes(n) ? "border-emerald-600 bg-emerald-100 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100" : "border-slate-300 dark:border-slate-700"}`} onClick={() => { setChosenNumbers(current => current.includes(n) ? current.filter(v => v !== n) : [...current, n]); setCombinePreview(null); }}>{n}</button>)}
                     </div>
-                    <div className="mb-2 flex shrink-0 gap-2"><button type="button" className={secondary} onClick={() => { setChosenNumbers(allCombineNumbers); setCombinePreview(null); }}>Seleccionar todos</button><button type="button" className={secondary} onClick={() => { setChosenNumbers([]); setCombinePreview(null); }}>Limpiar selección</button></div>
+                    <div className="mb-2 flex shrink-0 gap-2"><button type="button" className={secondary} onClick={() => { setChosenNumbers(panelCombineNumbers); setCombinePreview(null); }}>Seleccionar todos</button><button type="button" className={secondary} onClick={() => { setChosenNumbers([]); setCombinePreview(null); }}>Limpiar selección</button></div>
                     <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-2">
                         <div className="min-w-0 space-y-1 text-sm">
                             <span className="font-medium text-slate-600 dark:text-slate-300">Quiero generar</span>
-                            <div role="group" aria-label="Modalidad de combinaciones" className="grid grid-cols-3 gap-1">
-                                {(["quiniela", "pale", "tripleta"] as const).map((value, index) => <button key={value} type="button" autoFocus={index === 0} aria-pressed={combineMode === value} className={`rounded-md border px-2 py-2 text-sm font-semibold transition-colors ${combineMode === value ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"}`} onClick={() => { setCombineMode(value); setCombineError(""); setCombinePreview(null); }}>{modes[value]}</button>)}
+                            <div role="group" aria-label="Modalidad de combinaciones" className="grid grid-cols-4 gap-1">
+                                {(["quiniela", "pale", "tripleta", "super_pale"] as const).map((value, index) => <button key={value} type="button" autoFocus={index === 0} aria-pressed={combineMode === value} className={`rounded-md border px-1 py-2 text-xs font-semibold transition-colors ${combineMode === value ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"}`} onClick={() => { setCombineMode(value); setCombineError(""); setCombinePreview(null); }}>{modes[value]}</button>)}
                             </div>
                         </div>
-                        <Field label="Monto por jugada y sorteo"><MoneyInput className={input} inputMode="decimal" value={combineAmount} onValueChange={value => { setCombineAmount(value); setCombinePreview(null); }} /></Field>
-                        <p className="rounded-lg bg-slate-50 p-2 text-xs dark:bg-slate-800 sm:col-span-2">{Math.max(0, combinationCount)} combinaciones × {selected.length} sorteos seleccionados. Se conservan las jugadas actuales y se omiten las combinaciones que ya están agregadas.</p>
+                        <Field label={combineMode === 'super_pale' ? 'Monto por jugada y pareja' : 'Monto por jugada y sorteo'}><MoneyInput className={input} inputMode="decimal" value={combineAmount} onValueChange={value => { setCombineAmount(value); setCombinePreview(null); }} /></Field>
+                        <p className="rounded-lg bg-slate-50 p-2 text-xs dark:bg-slate-800 sm:col-span-2">{Math.max(0, combinationCount)} combinaciones × {combinationDestinations} {combineMode === 'super_pale' ? 'parejas seleccionadas' : 'sorteos seleccionados'}. Se conservan las jugadas actuales y se omiten las combinaciones que ya están agregadas.</p>
                         {combineNumbers.length < combinationSize && <p className="text-sm text-amber-700 dark:text-amber-300">Necesitas {combinationSize} números distintos; tienes {combineNumbers.length}.</p>}
                         {combineError && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{combineError}</p>}
                     </div>
                     <div className="mt-2 min-h-0 flex-1 overflow-auto text-sm [scrollbar-width:thin] dark:[scrollbar-color:#475569_#0f172a]">
+                        {combineMode === 'super_pale' && <div className="mb-3"><SuperPairTargets draws={superDraws} pairs={superPairs} isEnabled={pairEnabled} onChange={setSuperPairs} disabled={checkingCombinations} /></div>}
                         <p className="mb-2 font-medium">Combinaciones a agregar</p>
                         <div className="flex flex-wrap gap-2">{(() => {
                             const result: string[] = [];
@@ -814,7 +834,7 @@ function SalesWorkspace({
                     </div>
                     <div className="mt-2 flex shrink-0 flex-wrap justify-end gap-2 border-t border-slate-200 pt-2 dark:border-slate-700">
                         <button type="button" className={secondary} onClick={() => setCombineOpen(false)}><X className="mr-2 inline h-4 w-4" />Cancelar</button>
-                        <button className={button} disabled={combineNumbers.length < combinationSize || !selected.length}><Plus className="mr-2 inline h-4 w-4" />{checkingCombinations ? "Agregando…" : "Agregar combinaciones"}</button>
+                        <button className={button} disabled={combineNumbers.length < combinationSize || !combinationDestinations}><Plus className="mr-2 inline h-4 w-4" />{checkingCombinations ? "Agregando…" : "Agregar combinaciones"}</button>
                     </div>
                     </fieldset>
                 </form>
@@ -858,10 +878,16 @@ function SalesWorkspace({
                             <p id="duplicate-ticket-help" className="text-xs text-slate-500 dark:text-slate-400">{duplicateUsesQr ? "Escanea o pega el QR: se consultará automáticamente. Después pulsa Enter para cargar las jugadas." : `Usa el número impreso en el ticket de ${settings.copy_consortium_tickets ? 'cualquier banca de este consorcio' : 'esta banca'}, con o sin T-.`}</p>
                         </div>
                         {duplicateError && <p id="duplicate-ticket-error" role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{duplicateError}</p>}
-                        <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">Consulta el ticket y elige a qué sorteo abierto trasladar cada grupo de jugadas. El ticket original se conserva; la nueva venta se emite al pulsar Vender.</div>
+                        <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">{duplicateMode === 'selected' ? 'Las jugadas regulares se copian a los sorteos marcados y los súper palés a las parejas elegidas.' : 'Consulta el ticket y elige a qué sorteo abierto trasladar cada grupo de jugadas.'} El ticket original se conserva; la nueva venta se emite al pulsar Vender.</div>
                         {duplicateSource && <div className="space-y-3">
                             <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">Ticket {duplicateReference} · {duplicateSource.length === 1 ? "1 jugada encontrada" : `${duplicateSource.length} jugadas encontradas`}</p>
-                            <h3 className="font-semibold">Sorteos de destino</h3>
+                            {duplicateMode === 'selected' ? <div className="space-y-3">
+                                <h3 className="font-semibold">Copiar en los sorteos seleccionados</h3>
+                                <p className="text-xs text-slate-500">Cada jugada se toma una vez y conserva su monto. Las regulares usan los sorteos marcados; los súper palés usan las parejas elegidas.</p>
+                                {duplicateSource.some(line => line.modality !== 'super_pale') && <fieldset className="rounded-lg border border-slate-200 p-2 dark:border-slate-700"><legend className="px-1 text-sm font-semibold">Sorteos regulares de destino</legend><div className="grid max-h-40 grid-cols-2 gap-2 overflow-auto">{draws.filter((draw: Draw) => isOpen(draw.id) && draw.modalities.some(mode => mode !== 'super_pale')).map((draw: Draw) => <label key={draw.id} className="flex items-start gap-2 text-xs"><input type="checkbox" className="mt-0.5 rounded text-emerald-600" aria-label={`Copiar en ${nameForDraw(draw.id)}`} checked={selected.includes(draw.id)} onChange={e => { setSelected(ids => e.target.checked ? [...ids, draw.id] : ids.filter(id => id !== draw.id)); setDuplicateError(''); }} />{nameForDraw(draw.id)}</label>)}</div></fieldset>}
+                                {duplicateSource.some(line => line.modality === 'super_pale') && <SuperPairTargets draws={superDraws} pairs={superPairs} isEnabled={pairEnabled} onChange={pairs => { setSuperPairs(pairs); setDuplicateError(''); }} disabled={duplicating} />}
+                                {duplicateTemplates.filter(item => item.amounts.length > 1).map(item => <Field key={item.key} label={`Monto de ${modes[item.line.modality as keyof typeof modes]} ${item.line.numbers}`}><ComboboxSelect className={input} value={duplicateAmounts[item.key] ?? ''} onChange={e => { setDuplicateAmounts(current => ({...current, [item.key]:e.target.value})); setDuplicateError(''); }}><option value="">Elige el monto del original</option>{item.amounts.map(amount => <option key={amount} value={amount}>{money(Math.round(Number(amount) * 100), currency)}</option>)}</ComboboxSelect><p className="mt-1 text-xs text-slate-500">La jugada aparece con montos distintos. Elige cuál copiar a los nuevos destinos.</p></Field>)}
+                            </div> : <><h3 className="font-semibold">Sorteos de destino · originales</h3>
                             <p className="text-xs text-slate-500">Se conservan los números y montos. Solo aparecen destinos compatibles con las modalidades del sorteo original.</p>
                             {Array.from(new Set(duplicateSource.flatMap(line => [line.draw_id, ...(line.second_draw_id ? [line.second_draw_id] : [])]))).map(id => {
                                 const original = draws.find((d: Draw) => d.id === id);
@@ -873,6 +899,7 @@ function SalesWorkspace({
                                     </ComboboxSelect>
                                 </label>;
                             })}
+                            </>}
                         </div>}
                         {lines.length > 0 && <p className="text-sm text-amber-700 dark:text-amber-300">Al cargar el ticket se reemplazarán las {lines.length} jugadas actuales.</p>}
                     </div>
@@ -954,7 +981,7 @@ function SalesWorkspace({
                 </div>
                 <div tabIndex={0} aria-label="Sorteos disponibles" className="grid min-h-0 flex-[3_1_0%] grid-cols-2 auto-rows-max content-start gap-1.5 overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin] [scrollbar-color:#94a3b8_#f1f5f9] dark:[scrollbar-color:#475569_#0f172a]">
                     {draws
-                        .filter((d: Draw) => isOpen(d.id) && (superPale ? d.modalities.includes('super_pale') : (lotteryFilter === null || d.lottery_id === lotteryFilter) && (!selectedOnly || selected.includes(d.id))))
+                        .filter((d: Draw) => isOpen(d.id) && (superPale ? superDrawIds.has(d.id) : (lotteryFilter === null || d.lottery_id === lotteryFilter) && (!selectedOnly || selected.includes(d.id))))
                         .sort((a: Draw, b: Draw) => getWindow(a).close - getWindow(b).close || a.closes_at.localeCompare(b.closes_at) || a.name.localeCompare(b.name, "es") || a.id - b.id)
                         .map((d: Draw) => {
                             const seconds = Math.max(
@@ -1007,7 +1034,7 @@ function SalesWorkspace({
                         catálogo y la configuración de la banca.
                     </p>
                 )}
-                {superPale && draws.some((d: Draw) => isOpen(d.id)) && !draws.some((d: Draw) => isOpen(d.id) && d.modalities.includes('super_pale')) && <p className="py-2 text-sm text-slate-500">No hay sorteos abiertos habilitados para súper palé.</p>}
+                {superPale && draws.some((d: Draw) => isOpen(d.id)) && !superDrawIds.size && <p className="py-2 text-sm text-slate-500">No hay parejas abiertas y habilitadas para súper palé.</p>}
                 {superPale && <section aria-label="Parejas de súper palé" className="mt-2 flex min-h-0 flex-[2_1_0%] flex-col rounded-lg border border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/30">
                     <div className="flex shrink-0 items-center justify-between gap-2 border-b border-emerald-200 px-3 py-2 dark:border-emerald-900">
                         <h2 className="text-xs font-semibold">Combinaciones a jugar · {superPairs.length}</h2>
@@ -1151,7 +1178,7 @@ function SalesWorkspace({
                 <button type="button" className={secondary + " !border-amber-500/40 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-900/60"} aria-label="Ganadores F8" data-sale-shortcut="F8" aria-keyshortcuts="F8" title="Ganadores (F8)" onClick={() => setWinnersOpen(true)}>
                     <Trophy aria-hidden="true" className="mr-1.5 hidden h-4 w-4 xl:inline" /><span>Ganadores</span> <kbd className="ml-0.5 rounded border border-current/20 px-0.5 text-[8px] opacity-70 xl:ml-1 xl:px-1 xl:text-[10px]">F8</kbd>
                 </button>
-                <button className={secondary + " !border-violet-500/40 bg-violet-50 text-violet-700 hover:bg-violet-100 dark:bg-violet-950/40 dark:text-violet-300 dark:hover:bg-violet-900/60"} disabled={busy} aria-label="Ligar números F9" data-sale-shortcut="F9" aria-keyshortcuts="F9" title="Ligar números (F9)" onClick={() => { setCombineError(""); setCombineAmount(amount); setChosenNumbers(allCombineNumbers); setCombinePreview(null); setCombineOpen(true); }}>
+                <button className={secondary + " !border-violet-500/40 bg-violet-50 text-violet-700 hover:bg-violet-100 dark:bg-violet-950/40 dark:text-violet-300 dark:hover:bg-violet-900/60"} disabled={busy} aria-label="Ligar números F9" data-sale-shortcut="F9" aria-keyshortcuts="F9" title="Ligar números (F9)" onClick={() => { setCombineError(""); setCombineAmount(amount); setCombineSource('all'); setCombineMode(superPale ? 'super_pale' : 'pale'); setChosenNumbers(allCombineNumbers); setCombinePreview(null); setCombineOpen(true); }}>
                     <Shuffle aria-hidden="true" className="mr-1.5 hidden h-4 w-4 xl:inline" /><span>Ligar</span> <kbd className="ml-0.5 rounded border border-current/20 px-0.5 text-[8px] opacity-70 xl:ml-1 xl:px-1 xl:text-[10px]">F9</kbd>
                 </button>
                 <button type="button" aria-label="Aleatorio" data-sale-shortcut="Alt+A" aria-keyshortcuts="Alt+A" title="Generar jugadas aleatorias (Alt+A)" className={secondary + " !border-cyan-500/40 bg-cyan-50 text-cyan-700 hover:bg-cyan-100 dark:bg-cyan-950/40 dark:text-cyan-300 dark:hover:bg-cyan-900/60"} disabled={workspaceBusy} onClick={() => setRandomOpen(true)}><Dice5 aria-hidden="true" className="mr-1.5 hidden h-4 w-4 xl:inline" /><span>Aleatorio</span><kbd className="ml-0.5 rounded border border-current/20 px-0.5 text-[8px] opacity-70 xl:ml-1 xl:px-1 xl:text-[10px]">Alt+A</kbd></button>
