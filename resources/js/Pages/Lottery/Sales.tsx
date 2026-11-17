@@ -325,17 +325,10 @@ function SalesWorkspace({
         }));
     };
     const [repeatedPlay, setRepeatedPlay] = useState<Line[] | null>(null);
-    const clearCompletedPairs = (generated: Line[], accepted: Line[]) => {
-        const key = (line: Line) => [line.draw_id, line.second_draw_id ?? line.draw_id].sort((a, b) => a - b).join('-');
-        const completedPairs = new Set(accepted.filter(line => line.modality === 'super_pale').map(key));
-        for (const line of generated) {
-            if (!accepted.includes(line)) completedPairs.delete(key(line));
-        }
-        if (completedPairs.size) {
-            setSuperPairs(pairs => pairs.filter(([first, second]) => !completedPairs.has(`${first}-${second}`)));
-            setPairStart(null);
-            setPairError('');
-        }
+    const finishSuperPaleEntry = (accepted: Line[]) => {
+        if (!accepted.some(line => line.modality === 'super_pale')) return;
+        setPairStart(null);
+        setPairError('');
     };
     const add = async (confirmed?: Line[]) => {
         if (checkingRef.current || busy) return;
@@ -378,7 +371,7 @@ function SalesWorkspace({
                     }
                     return updated;
                 });
-                clearCompletedPairs(generated, accepted);
+                finishSuperPaleEntry(accepted);
                 setNumbers("");
                 requestKey.current = requestId();
             }
@@ -574,7 +567,7 @@ function SalesWorkspace({
             if (copied.length > 500) throw Error('Máximo 500 jugadas por ticket. Reduce los destinos seleccionados.');
             setLines(copied);
             if (duplicateMode === 'original') setSelected([...new Set(copied.filter(line => line.modality !== 'super_pale').map(line => line.draw_id))]);
-            clearCompletedPairs(copied, copied);
+            finishSuperPaleEntry(copied);
             requestKey.current = requestId();
             setMessage('');
             setDuplicateOpen(false);
@@ -652,7 +645,7 @@ function SalesWorkspace({
             const accepted = preview.filter(item => !item.error).map(item => item.line);
             setCombineAddedCount(accepted.length);
             setLines(current => [...current, ...newPlays(current, accepted)]);
-            clearCompletedPairs(fresh, accepted);
+            finishSuperPaleEntry(accepted);
             requestKey.current = requestId();
             setCombinePreview(preview.filter(item => !!item.error));
             setCombineOpen(false);

@@ -70,7 +70,7 @@ async function choosePair(user: ReturnType<typeof userEvent.setup>, first: numbe
     for (const id of [first, second]) await user.click(screen.getByRole('button', { name: new RegExp(`^Sorteo ${id}`) }));
 }
 
-test('Súper palé agrega solo las tres parejas elegidas, limpia las combinaciones y conserva la selección regular', async () => {
+test('Súper palé conserva las parejas para agregar otros números y mantiene la selección regular', async () => {
     const modalities = Object.fromEntries([1, 2, 3, 4, 5, 6].map(id => [id, superModalities]));
     const pairs: Record<string, { enabled: boolean }> = {};
     for (let first = 1; first <= 6; first++) for (let second = first + 1; second <= 6; second++) pairs[`${first}-${second}`] = { enabled: true };
@@ -88,14 +88,17 @@ test('Súper palé agrega solo las tres parejas elegidas, limpia las combinacion
         [1, 2, 'super_pale', '10-20', '1'], [3, 4, 'super_pale', '10-20', '1'], [5, 6, 'super_pale', '10-20', '1'],
     ]);
     expect(axios.post).toHaveBeenCalledTimes(3);
-    expect(within(block).queryAllByRole('button', { name: /^Quitar pareja/ })).toHaveLength(0);
-    expect(screen.getByRole('heading', { name: 'Combinaciones a jugar · 0' })).toBeTruthy();
+    expect(within(block).queryAllByRole('button', { name: /^Quitar pareja/ })).toHaveLength(3);
+    expect(screen.getByRole('heading', { name: 'Combinaciones a jugar · 3' })).toBeTruthy();
     expect(screen.queryAllByRole('button', { name: /^Sorteo/, pressed: true })).toHaveLength(0);
+    await enterPlay(user, '3040');
+    await waitFor(() => expect(draftLines()).toHaveLength(6));
+    expect(draftLines().slice(3).map((line:any) => [line.draw_id,line.second_draw_id,line.numbers])).toEqual([[1,2,'30-40'],[3,4,'30-40'],[5,6,'30-40']]);
     await user.click(screen.getByRole('checkbox', { name: 'Súper palé' }));
     expect(screen.getByText('3 sorteos seleccionados')).toBeTruthy();
     await enterPlay(user, '07');
-    await waitFor(() => expect(draftLines()).toHaveLength(6));
-    expect(draftLines().slice(3).map((line: any) => [line.draw_id, line.modality])).toEqual([[1, 'quiniela'], [3, 'quiniela'], [5, 'quiniela']]);
+    await waitFor(() => expect(draftLines()).toHaveLength(9));
+    expect(draftLines().slice(6).map((line: any) => [line.draw_id, line.modality])).toEqual([[1, 'quiniela'], [3, 'quiniela'], [5, 'quiniela']]);
 });
 
 test('Súper palé admite un sorteo en varias parejas, impide duplicados y permite quitarlas', async () => {
@@ -121,6 +124,8 @@ test('Súper palé admite un sorteo en varias parejas, impide duplicados y permi
     await enterPlay(user, '1020.');
     await waitFor(() => expect(draftLines()).toHaveLength(2));
     expect(draftLines().map((line: any) => [line.draw_id, line.second_draw_id, line.numbers])).toEqual([[1, 3, '10-20'], [1, 3, '01-02']]);
+    expect(screen.getByRole('heading', { name: 'Combinaciones a jugar · 1' })).toBeTruthy();
+    await user.click(screen.getByRole('button', {name:'Limpiar combinaciones', exact:true}));
     expect(screen.getByRole('heading', { name: 'Combinaciones a jugar · 0' })).toBeTruthy();
     expect(draftLines()).toHaveLength(2);
 });
@@ -143,10 +148,10 @@ test('Súper palé requiere una pareja completa y la conserva por cada ticket en
     await enterPlay(user, '1020');
     await waitFor(() => expect(draftLines()).toHaveLength(1));
     const saved = JSON.parse(sessionStorage.getItem(storageKey)!);
-    expect(saved.drafts.find((draft: any) => draft.id === saved.activeId).superPairs).toEqual([]);
+    expect(saved.drafts.find((draft: any) => draft.id === saved.activeId).superPairs).toEqual([[1,2]]);
 });
 
-test('Súper palé conserva las combinaciones rechazadas y retira solamente las agregadas con cupo', async () => {
+test('Súper palé conserva todas las parejas después de una adición parcial para reutilizarlas', async () => {
     const user = await mount({ 1: superModalities, 2: superModalities, 3: superModalities }, { pairs: { '1-2': { enabled: true }, '1-3': { enabled: true } } });
     await user.click(screen.getByRole('checkbox', { name: 'Súper palé' }));
     await choosePair(user, 1, 2); await choosePair(user, 1, 3);
@@ -164,15 +169,15 @@ test('Súper palé conserva las combinaciones rechazadas y retira solamente las 
     await user.click(screen.getByRole('button', { name: 'Entendido' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(draftLines()).toHaveLength(1);
-    expect(screen.getByRole('heading', { name: 'Combinaciones a jugar · 1' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Quitar pareja Sorteo 1 + Sorteo 2' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Combinaciones a jugar · 2' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Quitar pareja Sorteo 1 + Sorteo 2' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Quitar pareja Sorteo 1 + Sorteo 3' })).toBeTruthy();
 
     vi.mocked(axios.post).mockResolvedValue({ data: { available_minor: null } });
-    await enterPlay(user, '1020');
-    await waitFor(() => expect(draftLines()).toHaveLength(2));
-    expect(screen.getByRole('heading', { name: 'Combinaciones a jugar · 0' })).toBeTruthy();
-    expect(draftLines().map((line: any) => line.second_draw_id)).toEqual([2, 3]);
+    await enterPlay(user, '3040');
+    await waitFor(() => expect(draftLines()).toHaveLength(3));
+    expect(screen.getByRole('heading', { name: 'Combinaciones a jugar · 2' })).toBeTruthy();
+    expect(draftLines().map((line: any) => line.second_draw_id)).toEqual([2, 2, 3]);
 });
 
 test('el sufijo s abre la selección de parejas y vender limpia las parejas y Solo seleccionados', async () => {
@@ -298,7 +303,7 @@ test('Duplicar en destinos seleccionados separa regulares y súper palés y no r
     ]);
     expect(axios.post).not.toHaveBeenCalled();
     const saved = JSON.parse(sessionStorage.getItem(storageKey)!);
-    expect(saved.drafts.find((draft:any)=>draft.id===saved.activeId)).toMatchObject({selected:[2], superPairs:[]});
+    expect(saved.drafts.find((draft:any)=>draft.id===saved.activeId)).toMatchObject({selected:[2], superPairs:[[1,2]]});
 });
 
 test('Duplicar permite completar los destinos de ambos tipos dentro de la modal antes de reemplazar el ticket', async () => {
@@ -687,7 +692,7 @@ test('Ligar toma todos los bloques por defecto y puede limitar los números a un
     expect(within(resetSource).getByRole('button', {name:'Todos los bloques'}).getAttribute('aria-pressed')).toBe('true');
 });
 
-test('Ligar genera súper palés solo en las parejas elegidas, verifica cupo y limpia las combinaciones completadas', async () => {
+test('Ligar genera súper palés solo en las parejas elegidas, verifica cupo y conserva las combinaciones', async () => {
     const user = await mount({1:superModalities,2:superModalities,3:superModalities}, {pairs:{'1-2':{enabled:true},'1-3':{enabled:true}}});
     await user.click(screen.getByRole('button', {name:/^Sorteo 1/}));
     for (const number of ['02','11','25']) await enterPlay(user,number);
@@ -709,7 +714,8 @@ test('Ligar genera súper palés solo en las parejas elegidas, verifica cupo y l
     expect((vi.mocked(axios.post).mock.calls[0][1] as any).lines).toHaveLength(6);
     await user.click(screen.getByRole('button', {name:'Entendido'}));
     await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByRole('heading', {name:'Combinaciones a jugar · 1'})).toBeTruthy();
+    expect(screen.getByRole('heading', {name:'Combinaciones a jugar · 2'})).toBeTruthy();
+    expect(screen.getByRole('button', {name:'Quitar pareja Sorteo 1 + Sorteo 2'})).toBeTruthy();
     expect(screen.getByRole('button', {name:'Quitar pareja Sorteo 1 + Sorteo 3'})).toBeTruthy();
 });
 
