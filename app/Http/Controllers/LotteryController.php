@@ -564,6 +564,27 @@ class LotteryController extends Controller
 
 
 
+    public function availabilityBatch(Request $r, Configuration $config, LimitEngine $limits)
+    {
+        $branch = $this->branch($r);
+        $data = $r->validate(['lines'=>'required|array|list|min:1|max:500', 'lines.*'=>'required|array', 'pending'=>'sometimes|array|list|max:500', 'pending.*'=>'required|array']);
+        $pendingCount = count($data['pending'] ?? []);
+        abort_if($pendingCount + count($data['lines']) > 500, 422, 'Máximo 500 jugadas por ticket.');
+        $prepared = $config->prepareBatch($branch, [...($data['pending'] ?? []), ...$data['lines']]);
+        $pending = array_slice($prepared, 0, $pendingCount);
+        foreach ($pending as $row) {
+            if ($row['error']) throw \Illuminate\Validation\ValidationException::withMessages(['pending'=>$row['error']]);
+        }
+        $candidates = array_slice($prepared, $pendingCount);
+        $valid = array_values(array_filter($candidates, fn ($row) => $row['line'] !== null));
+        $available = $limits->batch($branch, array_column($valid, 'line'), array_column($pending, 'line'));
+        $index = 0;
+        $results = array_map(function ($row) use ($available, &$index) {
+            return $row['error'] ? ['available_minor'=>null, 'accepted'=>false, 'error'=>$row['error']] : $available[$index++];
+        }, $candidates);
+        return response()->json(['results'=>$results, 'server_now'=>$config->clock()->toIso8601String()])->header('Cache-Control', 'no-store, private');
+    }
+
     public function sell(Request $r, SaleService $sales)
 
     {

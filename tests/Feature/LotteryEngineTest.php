@@ -1030,6 +1030,78 @@ class LotteryEngineTest extends TestCase
         foreach(['','&format=pdf','&format=print'] as $format) $this->getJson($url.$format)->assertForbidden();
     }
 
+    public function test_batch_availability_accumulates_only_accepted_wagers_without_creating_sales(): void
+    {
+        $this->limit(['amount_minor'=>2500]);
+        $this->sell([$this->line('5')]);
+        $response = $this->actingAs($this->seller)->postJson('/lottery/availability/batch', [
+            'pending'=>[$this->line('5')], 'lines'=>[$this->line('10'), $this->line('10'), $this->line('4')],
+        ])->assertOk()->assertJsonCount(3, 'results');
+        $this->assertSame([1500,500,500], array_column($response->json('results'), 'available_minor'));
+        $this->assertSame([true,false,true], array_column($response->json('results'), 'accepted'));
+        $this->assertSame(1, Ticket::count());
+    }
+
+    public function test_batch_limits_match_individual_checks_for_shared_separate_and_category_rules(): void
+    {
+        $this->sell([$this->line('3')]);
+        $this->branch->update(['lottery_settings'=>['daily_limit_minor'=>5000]]);
+        $this->limit(['amount_minor'=>6000]);
+        $this->limit(['amount_minor'=>2000, 'aggregation'=>'separate']);
+        $this->limit(['amount_minor'=>1500, 'modality'=>'quiniela', 'match_type'=>'contains', 'numbers'=>'10']);
+        $this->limit(['amount_minor'=>2500, 'modality'=>'super_pale', 'category'=>'1-1']);
+        $config = app(Configuration::class);
+        $branch = $this->branch->fresh();
+        $pending = [$config->prepare($branch, $this->line('1'))];
+        $lines = array_map(fn ($line)=>$config->prepare($branch, $line), [
+            $this->line('10'), [...$this->line('10'), 'numbers'=>'20'],
+            [...$this->line('15'), 'draw_id'=>$this->b->id], $this->line('5', true), $this->line('2', true),
+        ]);
+        $limits = app(LimitEngine::class);
+        $expected = [];
+        $accepted = $pending;
+        foreach ($lines as $line) {
+            $available = $limits->available($branch, $line, $accepted);
+            $fits = $available === null || $available >= $line['amount_minor'];
+            $expected[] = ['available_minor'=>$available, 'accepted'=>$fits, 'error'=>$fits ? null : 'Cupo insuficiente'];
+            if ($fits) $accepted[] = $line;
+        }
+        $this->assertSame($expected, $limits->batch($branch, $lines, $pending));
+    }
+
+    public function test_batch_availability_keeps_query_count_constant_as_the_number_of_wagers_grows(): void
+    {
+        $this->actingAs($this->seller);
+        \Illuminate\Support\Facades\DB::enableQueryLog();
+        try {
+            \Illuminate\Support\Facades\DB::flushQueryLog();
+            $this->postJson('/lottery/availability/batch', ['lines'=>[$this->line('1')]])->assertOk();
+            $single = count(\Illuminate\Support\Facades\DB::getQueryLog());
+            \Illuminate\Support\Facades\DB::flushQueryLog();
+            $lines = array_map(fn ($i)=>[...$this->line('1'), 'numbers'=>str_pad((string)$i,2,'0',STR_PAD_LEFT)], range(0,99));
+            $this->postJson('/lottery/availability/batch', ['lines'=>$lines])->assertOk()->assertJsonCount(100,'results');
+            $many = count(\Illuminate\Support\Facades\DB::getQueryLog());
+            $this->assertLessThanOrEqual($single + 2, $many, "Queries grew from $single to $many");
+        } finally { \Illuminate\Support\Facades\DB::disableQueryLog(); }
+        $this->assertSame(0, Ticket::count());
+    }
+
+    public function test_batch_availability_validates_candidates_and_enforces_bank_and_permission_scope(): void
+    {
+        $this->actingAs($this->seller);
+        $this->postJson('/lottery/availability/batch', ['lines'=>[[...$this->line(), 'numbers'=>'invalid'], $this->line('1')]])->assertOk()
+            ->assertJsonPath('results.0.accepted',false)->assertJsonPath('results.1.accepted',true);
+        $this->postJson('/lottery/availability/batch', ['lines'=>[$this->line()], 'pending'=>[[...$this->line(), 'numbers'=>'invalid']]])->assertUnprocessable();
+        $this->postJson('/lottery/availability/batch', ['lines'=>array_fill(0,501,$this->line())])->assertUnprocessable();
+        $this->postJson('/lottery/availability/batch', ['lines'=>[$this->line()], 'branch_id'=>999999])->assertNotFound();
+        $other = BranchOffice::create(['office_id'=>$this->office->id, 'code'=>'BATCH-OTHER', 'name'=>'Otra banca', 'is_active'=>true]);
+        $this->postJson('/lottery/availability/batch', ['lines'=>[$this->line()], 'branch_id'=>$other->id])->assertStatus(409);
+        $permission = \App\Models\Permission::where('slug','lottery.sell')->firstOrFail();
+        foreach (Role::all() as $role) $role->permissions()->detach($permission->id);
+        $this->seller->unsetRelation('roles');
+        $this->postJson('/lottery/availability/batch', ['lines'=>[$this->line()]])->assertForbidden();
+    }
+
     private function line(string $amount = '10', bool $super = false): array
     {
         return ['draw_id' => $this->a->id, 'second_draw_id' => $super ? $this->b->id : null, 'modality' => $super ? 'super_pale' : 'quiniela', 'numbers' => $super ? '10-20' : '10', 'amount' => $amount];

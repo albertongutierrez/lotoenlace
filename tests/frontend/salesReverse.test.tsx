@@ -25,7 +25,9 @@ beforeAll(() => {
 beforeEach(() => {
     sessionStorage.clear();
     vi.mocked(axios.get).mockResolvedValue({ data: { current: { id: 1 } } });
-    vi.mocked(axios.post).mockReset().mockResolvedValue({ data: { available_minor: null, server_now: new Date().toISOString() } });
+    vi.mocked(axios.post).mockReset().mockImplementation(async (url, payload:any) => ({data: String(url) === '/lottery/availability/batch'
+        ? {results:payload.lines.map(()=>({available_minor:null, accepted:true, error:null})), server_now:new Date().toISOString()}
+        : {available_minor:null, server_now:new Date().toISOString()}}));
 });
 afterEach(() => { cleanup(); clients.forEach(client => client.clear()); clients.length = 0; });
 
@@ -609,7 +611,20 @@ async function prepareRandom(user: ReturnType<typeof userEvent.setup>) {
     return dialog;
 }
 
-test('Ligar omite el sorteo incompatible, avisa y agrega en los demás sin alterar las jugadas previas', async () => {
+test('Agregar descarta sorteos incompatibles antes de consultar el cupo y conserva los compatibles', async () => {
+    const user = await mount({2:['quiniela']});
+    await user.click(screen.getByRole('button',{name:/^Sorteo 1/}));
+    await user.click(screen.getByRole('button',{name:/^Sorteo 2/}));
+    vi.mocked(axios.post).mockClear();
+    await enterPlay(user,'1020');
+    await waitFor(()=>expect(draftLines()).toHaveLength(1));
+    expect(draftLines()[0]).toMatchObject({draw_id:1, modality:'pale'});
+    expect(axios.post).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(axios.post).mock.calls[0][1]).toMatchObject({draw_id:1, modality:'pale'});
+    expect(screen.queryByRole('dialog')).toBeNull();
+});
+
+test('Ligar excluye sorteos incompatibles antes de una única consulta y agrega sin avisos de omisión', async () => {
     const user = await mount({ 2: ['quiniela'] });
     await screen.findByText('Caja abierta');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -623,16 +638,14 @@ test('Ligar omite el sorteo incompatible, avisa y agrega en los demás sin alter
     await user.click(within(group).getByRole('button', { name: 'Tripleta', exact: true }));
     vi.mocked(axios.post).mockClear();
     await user.click(screen.getByRole('button', { name: 'Agregar combinaciones' }));
-    await screen.findByText('Sorteos y jugadas omitidos');
-    expect(screen.getByText('No admite Tripleta; sorteo omitido.')).toBeTruthy();
-    expect(screen.getByText(/Se agregó 1 jugada/)).toBeTruthy();
+    await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
     expect(draftLines().slice(0, 6)).toEqual(previous);
     expect(draftLines()[6]).toMatchObject({ draw_id: 1, modality: 'tripleta', numbers: '02-11-25', amount: '1' });
     expect(axios.post).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(axios.post).mock.calls[0][1]).toMatchObject({ draw_id: 1, modality: 'tripleta' });
+    expect(vi.mocked(axios.post).mock.calls[0]).toEqual(['/lottery/availability/batch', {branch_id:1, pending:previous, lines:[{draw_id:1, modality:'tripleta', numbers:'02-11-25', amount:'1'}]}]);
 });
 
-test('Ligar informa cuando ningún sorteo admite la modalidad y conserva el ticket', async () => {
+test('Ligar no consulta ni muestra avisos si ningún sorteo admite la modalidad', async () => {
     const user = await mount({ 1: ['quiniela'], 2: ['quiniela'] });
     await screen.findByText('Caja abierta');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -644,10 +657,8 @@ test('Ligar informa cuando ningún sorteo admite la modalidad y conserva el tick
     await user.click(screen.getByRole('button', { name: /Ligar números/ }));
     await screen.findByRole('group', { name: 'Modalidad de combinaciones' });
     vi.mocked(axios.post).mockClear();
-    await user.click(screen.getByRole('button', { name: 'Agregar combinaciones' }));
-    await screen.findByText('Sorteos y jugadas omitidos');
-    expect(screen.getAllByText('No admite Palé; sorteo omitido.')).toHaveLength(2);
-    expect(screen.getByText(/No se agregaron nuevas jugadas/)).toBeTruthy();
+    expect((screen.getByRole('button', {name:'Agregar combinaciones'}) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText('Sorteos y jugadas omitidos')).toBeNull();
     expect(draftLines()).toEqual(previous);
     expect(axios.post).not.toHaveBeenCalled();
 });
@@ -686,14 +697,16 @@ test('Ligar genera súper palés solo en las parejas elegidas, verifica cupo y l
     await user.click(screen.getByRole('button', {name:/Ligar números/}));
     const group = await screen.findByRole('group', {name:'Modalidad de combinaciones'});
     await user.click(within(group).getByRole('button', {name:'Súper palé',exact:true}));
-    vi.mocked(axios.post).mockClear().mockImplementation(async (_url, data:any)=>({data:{available_minor:data.second_draw_id===3?0:null}}));
+    vi.mocked(axios.post).mockClear().mockImplementation(async (_url, data:any)=>({data:{results:data.lines.map((line:any)=>({available_minor:line.second_draw_id===3?0:null, accepted:line.second_draw_id!==3, error:line.second_draw_id===3?'Cupo insuficiente':null}))}}));
     await user.click(screen.getByRole('button', {name:'Agregar combinaciones'}));
     await screen.findByText('Sorteos y jugadas omitidos');
     expect(draftLines().slice(0,3)).toEqual(previous);
     expect(draftLines().slice(3).map((line:any)=>[line.draw_id,line.second_draw_id,line.modality,line.numbers])).toEqual([
         [1,2,'super_pale','02-11'],[1,2,'super_pale','02-25'],[1,2,'super_pale','11-25'],
     ]);
-    expect(axios.post).toHaveBeenCalledTimes(6);
+    expect(axios.post).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(axios.post).mock.calls[0][0]).toBe('/lottery/availability/batch');
+    expect((vi.mocked(axios.post).mock.calls[0][1] as any).lines).toHaveLength(6);
     await user.click(screen.getByRole('button', {name:'Entendido'}));
     await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
     expect(screen.getByRole('heading', {name:'Combinaciones a jugar · 1'})).toBeTruthy();

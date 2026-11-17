@@ -293,13 +293,11 @@ function SalesWorkspace({
             throw Error("Indica 1–2 dígitos para quiniela, 4 para palé o 6 para tripleta; usa s para súper palé. Añade un punto final para derecho y revés.");
         const eligible = (id: number) =>
             draws.find((d: Draw) => d.id === id)?.modalities.includes(m);
-        if (m !== 'super_pale' && ids.some((id) => !eligible(id)))
-            throw Error("Algún sorteo seleccionado no admite esa modalidad.");
         if (m === "super_pale") {
             if (superPairs.some(pair => !pairEnabled(pair))) throw Error('Una pareja seleccionada está cerrada o no está habilitada para súper palé.');
             return superPairs.flatMap(([draw_id, second_draw_id]) => variants.map(({ numbers }) => ({ draw_id, second_draw_id, modality: m, numbers, amount: stake })));
         }
-        return ids.flatMap((id) => variants.map(({ numbers }) => ({
+        return ids.filter(eligible).flatMap((id) => variants.map(({ numbers }) => ({
             draw_id: id,
             modality: m,
             numbers,
@@ -398,7 +396,7 @@ function SalesWorkspace({
     };
     const availability = useQuery({
         queryKey: ["lottery", "availability", auth.user.id, branch.id, selected, mode, numbers, lines],
-        enabled: selected.length === 1 && numbers === settledNumbers && parsePlayVariants(numbers, mode).length === 1 && mode !== "super_pale",
+        enabled: selected.length === 1 && draws.find((draw: Draw) => draw.id === selected[0])?.modalities.includes(mode) && numbers === settledNumbers && parsePlayVariants(numbers, mode).length === 1 && mode !== "super_pale",
         retry: false,
         gcTime: 0,
         queryFn: async ({ signal }) => {
@@ -616,7 +614,8 @@ function SalesWorkspace({
     const combiningRef = useRef(false);
     const [checkingCombinations, setCheckingCombinations] = useState(false);
     const combinationSize = combineMode === 'quiniela' ? 1 : combineMode === 'tripleta' ? 3 : 2;
-    const combinationDestinations = combineMode === 'super_pale' ? superPairs.length : selected.length;
+    const combineRegularDraws = selected.filter(id => isOpen(id) && draws.find((draw: Draw) => draw.id === id)?.modalities.includes(combineMode));
+    const combinationDestinations = combineMode === 'super_pale' ? superPairs.length : combineRegularDraws.length;
     const combinationCount = combinationSize === 1 ? combineNumbers.length : combinationSize === 2
         ? combineNumbers.length * (combineNumbers.length - 1) / 2
         : combineNumbers.length * (combineNumbers.length - 1) * (combineNumbers.length - 2) / 6;
@@ -630,14 +629,10 @@ function SalesWorkspace({
         try {
             if (combineNumbers.length < combinationSize) throw Error(`Necesitas al menos ${combinationSize} números distintos para generar ${modes[combineMode as keyof typeof modes]}.`);
             const superMode = combineMode === 'super_pale';
+            if (!superMode && selected.length && !combinationDestinations) return;
             if (!combinationDestinations) throw Error(superMode ? 'Selecciona al menos una pareja de súper palé.' : "Selecciona los sorteos donde deseas agregar las combinaciones.");
-            const compatible = superMode ? [] : selected.filter(id => draws.find((d: Draw) => d.id === id)?.modalities.includes(combineMode));
-            const preview: { line: Line; available: number | null; error: string }[] = (superMode ? [] : selected.filter(id => !compatible.includes(id))).map(draw_id => ({
-                line: { draw_id, modality: combineMode, numbers: "—", amount: combineAmount },
-                available: null,
-                error: `No admite ${modes[combineMode as keyof typeof modes]}; sorteo omitido.`,
-            }));
-            if (!superMode && !compatible.length) { setCombinePreview(preview); setCombineOpen(false); return; }
+            const compatible = superMode ? [] : combineRegularDraws;
+            const preview: { line: Line; available: number | null; error: string }[] = [];
             if (combinationCount * (superMode ? superPairs.length : compatible.length) + lines.length > 500) throw Error("Máximo 500 jugadas por ticket. Reduce las combinaciones o los sorteos seleccionados.");
             const generated: Line[] = [];
             const append = (numbers: string[]) => generated.push(...makeLines(combineMode, numbers.join(""), combineAmount, compatible));
@@ -648,19 +643,12 @@ function SalesWorkspace({
                     for (let k = j + 1; k < combineNumbers.length; k++) append([combineNumbers[i], combineNumbers[j], combineNumbers[k]]);
                 }
             }
-            const pending = [...lines];
             const fresh = newPlays(lines, generated);
-            if (!fresh.length && !preview.length) throw Error("Todas estas combinaciones ya están agregadas.");
-            for (const line of fresh) {
-                try {
-                    const { data } = await axios.post<{ available_minor: number | null }>("/lottery/availability", { ...line, branch_id: branch.id, pending });
-                    const fits = data.available_minor === null || data.available_minor >= Math.round(Number(line.amount) * 100);
-                    preview.push({ line, available: data.available_minor, error: fits ? "" : "Cupo insuficiente" });
-                    if (fits) pending.push(line);
-                } catch (e: any) {
-                    preview.push({ line, available: null, error: e.response?.data?.message ?? "No se pudo consultar" });
-                }
-            }
+            if (!fresh.length) throw Error("Todas estas combinaciones ya están agregadas.");
+            const {data} = await axios.post<{results: {available_minor:number|null; accepted:boolean; error:string|null}[]; server_now?:string}>('/lottery/availability/batch', {branch_id:branch.id, lines:fresh, pending:lines});
+            if (!Array.isArray(data.results) || data.results.length !== fresh.length) throw Error('No se pudo verificar el cupo de las combinaciones. Intenta de nuevo.');
+            data.results.forEach((result, index) => preview.push({line:fresh[index], available:result.available_minor, error:result.accepted ? '' : result.error ?? 'No se pudo consultar el cupo'}));
+            if (data.server_now) offset.current = new Date(data.server_now).getTime() - Date.now();
             const accepted = preview.filter(item => !item.error).map(item => item.line);
             setCombineAddedCount(accepted.length);
             setLines(current => [...current, ...newPlays(current, accepted)]);
@@ -669,7 +657,7 @@ function SalesWorkspace({
             setCombinePreview(preview.filter(item => !!item.error));
             setCombineOpen(false);
             setMessage("");
-        } catch (e: any) { setCombineError(e.message ?? "No se pudieron generar las combinaciones."); }
+        } catch (e: any) { setCombineError(e.response?.data?.message ?? e.message ?? "No se pudieron generar las combinaciones."); }
         finally { combiningRef.current = false; setCheckingCombinations(false); }
     };
     const [clearPlaysOpen, setClearPlaysOpen] = useState(false);
@@ -815,7 +803,7 @@ function SalesWorkspace({
                             </div>
                         </div>
                         <Field label={combineMode === 'super_pale' ? 'Monto por jugada y pareja' : 'Monto por jugada y sorteo'}><MoneyInput className={input} inputMode="decimal" value={combineAmount} onValueChange={value => { setCombineAmount(value); setCombinePreview(null); }} /></Field>
-                        <p className="rounded-lg bg-slate-50 p-2 text-xs dark:bg-slate-800">{Math.max(0, combinationCount)} combinaciones × {combinationDestinations} {combineMode === 'super_pale' ? 'parejas seleccionadas' : 'sorteos seleccionados'}. Se conservan las jugadas actuales y se omiten las combinaciones que ya están agregadas.</p>
+                        <p className="rounded-lg bg-slate-50 p-2 text-xs dark:bg-slate-800">{Math.max(0, combinationCount)} combinaciones × {combinationDestinations} {combineMode === 'super_pale' ? combinationDestinations === 1 ? 'pareja' : 'parejas' : combinationDestinations === 1 ? 'sorteo' : 'sorteos'}. Se conservan las jugadas actuales y se omiten las combinaciones que ya están agregadas.</p>
                         {combineNumbers.length < combinationSize && <p className="text-sm text-amber-700 dark:text-amber-300">Necesitas {combinationSize} números distintos; tienes {combineNumbers.length}.</p>}
                         {combineError && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{combineError}</p>}
                     </div>

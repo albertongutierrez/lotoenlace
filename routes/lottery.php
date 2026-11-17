@@ -27,6 +27,7 @@ Route::middleware(['auth', 'verified', EnsureActiveBranch::class, 'permission.ro
     Route::get('sales', [LotteryController::class, 'sales'])->name('sales');
     Route::get('published-results', [LotteryController::class, 'publishedResults'])->name('published-results');
     Route::post('availability', [LotteryController::class, 'availability'])->name('availability');
+    Route::post('availability/batch', [LotteryController::class, 'availabilityBatch'])->name('availability.batch');
     Route::post('sales', [LotteryController::class, 'sell'])->name('sell');
     Route::get('tickets', [LotteryController::class, 'tickets'])->name('tickets');
     Route::get('tickets/{code}', [LotteryController::class, 'ticket'])->name('ticket');

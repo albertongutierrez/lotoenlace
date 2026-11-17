@@ -109,9 +109,9 @@ class Configuration
         return CarbonImmutable::parse($date.' '.$close, $draw->timezone ?? 'America/Santo_Domingo');
     }
 
-    public function prepare(BranchOffice $branch, array $input): array
+    public function prepare(BranchOffice $branch, array $input, ?array $settings = null, ?\Illuminate\Support\Collection $draws = null): array
     {
-        $settings = $this->effective($branch);
+        $settings ??= $this->effective($branch);
         $mode = $input['modality'] ?? '';
         $count = ['quiniela' => 1, 'pale' => 2, 'tripleta' => 3, 'super_pale' => 2][$mode] ?? 0;
         $raw = preg_replace('/[\s-]/', '', (string) ($input['numbers'] ?? ''));
@@ -134,7 +134,7 @@ class Configuration
             if (! in_array($id, $settings['draw_ids'])) {
                 $this->fail('Sorteo no habilitado para esta banca.');
             }
-            $draw = Draw::find($id);
+            $draw = $draws !== null ? $draws->get($id) : Draw::find($id);
             if (! $draw || ! $draw->lottery?->active || ! in_array($mode, $draw->modalities, true)) {
                 $this->fail('Lotería o modalidad no habilitada para el sorteo.');
             }
@@ -167,6 +167,19 @@ class Configuration
 
         return ['draw_id' => $first, 'second_draw_id' => $second, 'draw_date' => $dates[0], 'second_draw_date' => $dates[1] ?? null, 'modality' => $mode, 'numbers' => implode('-', $numbers),
             'amount_minor' => $amount, 'rules' => $rule, 'closes_at' => min($closing)->utc()->format('Y-m-d H:i:s')];
+    }
+
+    public function prepareBatch(BranchOffice $branch, array $inputs): array
+    {
+        $settings = $this->effective($branch);
+        $draws = Draw::with('lottery')->whereIn('id', $settings['draw_ids'])->get()->keyBy('id');
+        return array_map(function ($input) use ($branch, $settings, $draws) {
+            try {
+                return ['line' => $this->prepare($branch, $input, $settings, $draws), 'error' => null];
+            } catch (ValidationException $e) {
+                return ['line' => null, 'error' => collect($e->errors())->flatten()->first()];
+            }
+        }, $inputs);
     }
 
     private function fail(string $message): never
