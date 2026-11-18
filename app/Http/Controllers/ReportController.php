@@ -40,7 +40,7 @@ class ReportController extends Controller
   };
   $start=$from->startOfDay()->utc(); $end=$to->addDay()->startOfDay()->utc();
   $base=Ticket::where('office_id',$active->office_id)->whereIn('branch_office_id',$bankIds);
-  $draws=Draw::with('lottery:id,name')->get()->keyBy('id');
+  $draws=Draw::with('lottery:id,name,timezone')->get()->keyBy('id');
   $name=fn($id)=>$draws->get($id)?->name??'Sorteo no disponible';
   $bankNames=$banks->pluck('code','id');
   $match=function($line) use($r,$draws) {

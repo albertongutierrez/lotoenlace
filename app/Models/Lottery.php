@@ -8,6 +8,8 @@ class Lottery extends Model
 {
     protected $guarded = [];
 
+    protected $attributes = ['timezone' => 'America/Santo_Domingo'];
+
     protected $casts = ['active' => 'boolean'];
 
     public function draws()

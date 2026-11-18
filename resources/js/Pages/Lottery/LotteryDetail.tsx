@@ -26,7 +26,7 @@ export default function LotteryDetail({ lottery: initialLottery, draws: initialD
     const rows = draws.filter(d => `${d.name} ${d.abbreviation ?? ''}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()) && (status === "all" || d.active === (status === "active")));
     const columns = useMemo<DataColumn<Draw>[]>(() => [
         { accessorKey: "name", header: "Sorteo", cell: ({ row: { original: d } }) => <div><b>{d.name}</b>{d.abbreviation && <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-800">{d.abbreviation}</span>}<p className="mt-1 text-xs text-slate-500">{d.source_url ? "Resultados enlazados" : "Sin fuente de resultados"}</p></div> },
-        { accessorKey: "draws_at", header: "Horario local / RD", cell: ({ row: { original: d } }) => <div className="whitespace-nowrap"><b>Sorteo {d.draws_at.slice(0, 5)}</b><p className="text-xs text-slate-500">{d.timezone ?? systemTimezone}</p><p className="mt-1 text-xs text-slate-500">Venta {d.opens_at.slice(0, 5)}–{d.closes_at.slice(0, 5)}</p><p className="text-xs text-emerald-700 dark:text-emerald-400">Hoy en RD: {new Date(drawTime(drawLocalDate(new Date(), d.timezone), d.draws_at, d.timezone)).toLocaleTimeString('es-DO', { timeZone: systemTimezone, hour: '2-digit', minute: '2-digit' })}</p></div> },
+        { accessorKey: "draws_at", header: "Horario local / RD", cell: ({ row: { original: d } }) => <div className="whitespace-nowrap"><b>Sorteo {d.draws_at.slice(0, 5)}</b><p className="text-xs text-slate-500">{d.timezone ?? systemTimezone}</p><p className="text-xs text-slate-500">{d.timezone_override === null ? 'Heredada de la lotería' : 'Zona propia'}</p><p className="mt-1 text-xs text-slate-500">Venta {d.opens_at.slice(0, 5)}–{d.closes_at.slice(0, 5)}</p><p className="text-xs text-emerald-700 dark:text-emerald-400">Hoy en RD: {new Date(drawTime(drawLocalDate(new Date(), d.timezone), d.draws_at, d.timezone)).toLocaleTimeString('es-DO', { timeZone: systemTimezone, hour: '2-digit', minute: '2-digit' })}</p></div> },
         { id: "days", header: "Días", cell: ({ row: { original: d } }) => <span className="text-xs">{d.weekdays.length === 7 ? "Todos los días" : d.weekdays.map(n => days[n]).join(" · ")}</span> },
         { id: "modes", header: "Modalidades", cell: ({ row: { original: d } }) => <div className="flex flex-wrap gap-1">{d.modalities.map(m => <span key={m} className="rounded bg-slate-100 px-2 py-1 text-xs dark:bg-slate-800">{modes[m as keyof typeof modes]}</span>)}</div> },
         { accessorKey: "active", header: "Estado", sortFn: "basic", cell: ({ row }) => <Status active={row.original.active} /> },
@@ -35,7 +35,7 @@ export default function LotteryDetail({ lottery: initialLottery, draws: initialD
     return <Shell fullWidth title={lottery.name}>
         <Link href="/lottery/catalog" className="inline-flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300"><ArrowLeft size={16} />Volver a loterías</Link>
         <div className={`${panel} flex flex-wrap items-center justify-between gap-4`}>
-            <div className="space-y-2"><Status active={lottery.active} /><p className="text-sm text-slate-500">{draws.length} sorteos · {draws.filter(d => d.active).length} activos · Horas según la zona de cada sorteo</p></div>
+            <div className="space-y-2"><Status active={lottery.active} /><p className="text-sm text-slate-500">{draws.length} sorteos · {draws.filter(d => d.active).length} activos</p><p className="text-sm text-slate-500">Zona de la lotería: <b>{lottery.timezone ?? systemTimezone}</b> · Los sorteos heredan salvo configuración propia.</p></div>
             <div className="flex flex-wrap gap-2"><button className={`${secondary} inline-flex items-center gap-2`} onClick={() => setEditLottery(true)}><Pencil size={16} />Editar lotería</button><button className={`${button} inline-flex items-center gap-2`} onClick={() => setEditing(null)}><Plus size={16} />Nuevo sorteo</button></div>
         </div>
         {!lottery.active && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Esta lotería está inactiva. Ninguno de sus sorteos está disponible para vender.</p>}
@@ -44,7 +44,7 @@ export default function LotteryDetail({ lottery: initialLottery, draws: initialD
             {query.isError && <div role="alert" className="p-4 text-red-600">No se pudieron actualizar los sorteos. <button className={secondary} onClick={() => query.refetch()}>Reintentar</button></div>}
             <DataTable loading={query.isLoading} columns={columns} data={rows} resetKey={`${search}:${status}`} emptyMessage="No hay sorteos que coincidan con los filtros." />
         </section>
-        {editLottery && <LotteryEditor lottery={lottery} onClose={() => setEditLottery(false)} />}
+        {editLottery && <LotteryEditor lottery={lottery} timezones={timezones} onClose={() => setEditLottery(false)} />}
         {editing !== undefined && <DrawEditor key={editing?.id ?? "new"} lottery={lottery} draw={editing ?? undefined} timezones={timezones} onClose={() => setEditing(undefined)} />}
     </Shell>;
 }

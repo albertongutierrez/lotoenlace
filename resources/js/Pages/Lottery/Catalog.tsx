@@ -9,7 +9,7 @@ import { PageProps } from "@/types";
 import { Shell, input, button, secondary, panel } from "./shared";
 import { LotteryEditor, LotteryRow, Status } from "./CatalogForms";
 
-export default function Catalog({ lotteries }: { lotteries: LotteryRow[] }) {
+export default function Catalog({ lotteries, timezones = [] }: { lotteries: LotteryRow[]; timezones?: string[] }) {
     const { auth } = usePage<PageProps>().props;
     const [search, setSearch] = useState("");
     const [status, setStatus] = useState("all");
@@ -23,6 +23,7 @@ export default function Catalog({ lotteries }: { lotteries: LotteryRow[] }) {
     const columns = useMemo<DataColumn<LotteryRow>[]>(() => [
         { accessorKey: "name", header: "Lotería", cell: ({ row }) => <Link className="font-semibold hover:text-emerald-600" href={`/lottery/catalog/lotteries/${row.original.id}`}>{row.original.name}</Link> },
         { accessorKey: "draws_count", header: "Sorteos", sortFn: "basic", cell: ({ row }) => row.original.draws_count ?? 0 },
+        { accessorKey: "timezone", header: "Zona horaria", cell: ({ row }) => row.original.timezone ?? 'America/Santo_Domingo' },
         { accessorKey: "active", header: "Estado", sortFn: "basic", cell: ({ row }) => <Status active={row.original.active} /> },
         { id: "actions", header: "Acciones", cell: ({ row }) => <div className="flex justify-end gap-2 whitespace-nowrap"><button className={`${secondary} inline-flex items-center gap-2`} aria-label={`Editar ${row.original.name}`} onClick={() => setEditing(row.original)}><Pencil size={14} />Editar</button><Link className={`${secondary} inline-flex items-center gap-2`} href={`/lottery/catalog/lotteries/${row.original.id}`}>Ver sorteos<ArrowRight size={14} /></Link></div> },
     ], []);
@@ -37,6 +38,6 @@ export default function Catalog({ lotteries }: { lotteries: LotteryRow[] }) {
             {query.isError && <div role="alert" className="p-4 text-red-600">No se pudo actualizar el catálogo. <button onClick={() => query.refetch()} className={secondary}>Reintentar</button></div>}
             <DataTable loading={query.isLoading} columns={columns} data={rows} resetKey={`${search}:${status}`} emptyMessage="No hay loterías que coincidan con los filtros." />
         </section>
-        {editing !== undefined && <LotteryEditor key={editing?.id ?? "new"} lottery={editing ?? undefined} onClose={() => setEditing(undefined)} />}
+        {editing !== undefined && <LotteryEditor key={editing?.id ?? "new"} lottery={editing ?? undefined} timezones={timezones} onClose={() => setEditing(undefined)} />}
     </Shell>;
 }

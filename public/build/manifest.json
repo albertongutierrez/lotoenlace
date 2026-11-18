@@ -15,8 +15,8 @@
       "_ThemeToggle-BioFM2pV.js"
     ]
   },
-  "_BackLink-PRrizHKi.js": {
-    "file": "assets/BackLink-PRrizHKi.js",
+  "_BackLink-B5HtFcDm.js": {
+    "file": "assets/BackLink-B5HtFcDm.js",
     "name": "BackLink",
     "imports": [
       "_dist-C5PraWGu.js",
@@ -24,12 +24,12 @@
       "resources/js/app.tsx"
     ]
   },
-  "_BranchOfficeForm-DFxb416n.js": {
-    "file": "assets/BranchOfficeForm-DFxb416n.js",
+  "_BranchOfficeForm-D5c8wUM0.js": {
+    "file": "assets/BranchOfficeForm-D5c8wUM0.js",
     "name": "BranchOfficeForm",
     "imports": [
       "_ComboboxSelect-CvF8XS6q.js",
-      "_BackLink-PRrizHKi.js",
+      "_BackLink-B5HtFcDm.js",
       "_TextInput-Bu7AXdqs.js",
       "_PrimaryButton-BJ0EL7W5.js",
       "_formatters-BMMw53Xh.js",
@@ -65,8 +65,8 @@
       "_jsx-runtime-Wy9s6hX0.js"
     ]
   },
-  "_IssuedTicketModal-DD27mxuO.js": {
-    "file": "assets/IssuedTicketModal-DD27mxuO.js",
+  "_IssuedTicketModal-DBldgQf1.js": {
+    "file": "assets/IssuedTicketModal-DBldgQf1.js",
     "name": "IssuedTicketModal",
     "imports": [
       "resources/js/app.tsx",
@@ -101,12 +101,12 @@
       "_jsx-runtime-Wy9s6hX0.js"
     ]
   },
-  "_PaymentPrintModal-DYWhLKNu.js": {
-    "file": "assets/PaymentPrintModal-DYWhLKNu.js",
+  "_PaymentPrintModal-7AHq2zGg.js": {
+    "file": "assets/PaymentPrintModal-7AHq2zGg.js",
     "name": "PaymentPrintModal",
     "imports": [
       "_jsx-runtime-Wy9s6hX0.js",
-      "_IssuedTicketModal-DD27mxuO.js"
+      "_IssuedTicketModal-DBldgQf1.js"
     ]
   },
   "_PrimaryButton-BJ0EL7W5.js": {
@@ -135,8 +135,8 @@
       "_shared-CF6-mAjX.js"
     ]
   },
-  "_ReportPdfModal-gV33QdqY.js": {
-    "file": "assets/ReportPdfModal-gV33QdqY.js",
+  "_ReportPdfModal-Dzx8EKWr.js": {
+    "file": "assets/ReportPdfModal-Dzx8EKWr.js",
     "name": "ReportPdfModal",
     "imports": [
       "_jsx-runtime-Wy9s6hX0.js",
@@ -149,11 +149,11 @@
       "_AuthenticatedLayout-BOE9JqmC.js"
     ]
   },
-  "_RoleForm-CoQfI_wh.js": {
-    "file": "assets/RoleForm-CoQfI_wh.js",
+  "_RoleForm-2MXn4-CV.js": {
+    "file": "assets/RoleForm-2MXn4-CV.js",
     "name": "RoleForm",
     "imports": [
-      "_BackLink-PRrizHKi.js",
+      "_BackLink-B5HtFcDm.js",
       "_TextInput-Bu7AXdqs.js",
       "_PrimaryButton-BJ0EL7W5.js",
       "_dist-C5PraWGu.js",
@@ -179,11 +179,11 @@
       "_jsx-runtime-Wy9s6hX0.js"
     ]
   },
-  "_UserForm-QNRW7WQm.js": {
-    "file": "assets/UserForm-QNRW7WQm.js",
+  "_UserForm-BxF9Q9em.js": {
+    "file": "assets/UserForm-BxF9Q9em.js",
     "name": "UserForm",
     "imports": [
-      "_BackLink-PRrizHKi.js",
+      "_BackLink-B5HtFcDm.js",
       "_TextInput-Bu7AXdqs.js",
       "_PrimaryButton-BJ0EL7W5.js",
       "_dist-C5PraWGu.js",
@@ -515,8 +515,8 @@
       "_jsx-runtime-Wy9s6hX0.js"
     ]
   },
-  "_useMutation-BF4hIT04.js": {
-    "file": "assets/useMutation-BF4hIT04.js",
+  "_useMutation-CNDODWs7.js": {
+    "file": "assets/useMutation-CNDODWs7.js",
     "name": "useMutation",
     "imports": [
       "_removable-Dn901sO-.js",
@@ -524,8 +524,8 @@
       "resources/js/app.tsx"
     ]
   },
-  "_useQuery-Dx_AzkSN.js": {
-    "file": "assets/useQuery-Dx_AzkSN.js",
+  "_useQuery-faPyTe7m.js": {
+    "file": "assets/useQuery-faPyTe7m.js",
     "name": "useQuery",
     "imports": [
       "_removable-Dn901sO-.js",
@@ -683,19 +683,19 @@
     ]
   },
   "resources/js/Pages/Lottery/Cash.tsx": {
-    "file": "assets/Cash-S2Ku_ZLK.js",
+    "file": "assets/Cash-bjZkENev.js",
     "name": "Cash",
     "src": "resources/js/Pages/Lottery/Cash.tsx",
     "isDynamicEntry": true,
     "imports": [
       "_ComboboxSelect-CvF8XS6q.js",
-      "_ReportPdfModal-gV33QdqY.js",
+      "_ReportPdfModal-Dzx8EKWr.js",
       "_AuthenticatedLayout-BOE9JqmC.js",
       "_MoneyInput-C3rSO8pa.js",
       "_paymentMethods-D-ZD2gV7.js",
       "_jsx-runtime-Wy9s6hX0.js",
-      "_useQuery-Dx_AzkSN.js",
-      "_useMutation-BF4hIT04.js",
+      "_useQuery-faPyTe7m.js",
+      "_useMutation-CNDODWs7.js",
       "_removable-Dn901sO-.js",
       "resources/js/app.tsx",
       "_Modal-BrAi07by.js",
@@ -716,7 +716,7 @@
     ]
   },
   "resources/js/Pages/Lottery/Catalog.tsx": {
-    "file": "assets/Catalog-CxkI5dTm.js",
+    "file": "assets/Catalog-D-Hdmxi6.js",
     "name": "Catalog",
     "src": "resources/js/Pages/Lottery/Catalog.tsx",
     "isDynamicEntry": true,
@@ -725,7 +725,7 @@
       "_data-table-9xUCtaoG.js",
       "_jsx-runtime-Wy9s6hX0.js",
       "_dist-C5PraWGu.js",
-      "_useQuery-Dx_AzkSN.js",
+      "_useQuery-faPyTe7m.js",
       "resources/js/app.tsx",
       "_plus-BEhFPh0F.js",
       "_search-sdVUzAfb.js",
@@ -736,7 +736,7 @@
     ]
   },
   "resources/js/Pages/Lottery/CatalogForms.tsx": {
-    "file": "assets/CatalogForms-ClqLiqoC.js",
+    "file": "assets/CatalogForms-B8gJzdPf.js",
     "name": "CatalogForms",
     "src": "resources/js/Pages/Lottery/CatalogForms.tsx",
     "isDynamicEntry": true,
@@ -744,7 +744,7 @@
       "_ComboboxSelect-CvF8XS6q.js",
       "_jsx-runtime-Wy9s6hX0.js",
       "_Modal-BrAi07by.js",
-      "_useMutation-BF4hIT04.js",
+      "_useMutation-CNDODWs7.js",
       "_removable-Dn901sO-.js",
       "resources/js/app.tsx",
       "_AuthenticatedLayout-BOE9JqmC.js",
@@ -753,7 +753,7 @@
     ]
   },
   "resources/js/Pages/Lottery/ConsortiumManagement.tsx": {
-    "file": "assets/ConsortiumManagement-B9LLhO-h.js",
+    "file": "assets/ConsortiumManagement-CuJeLW9F.js",
     "name": "ConsortiumManagement",
     "src": "resources/js/Pages/Lottery/ConsortiumManagement.tsx",
     "isDynamicEntry": true,
@@ -768,15 +768,15 @@
       "_rotate-ccw-B39rl3vx.js",
       "_data-table-9xUCtaoG.js",
       "_row-actions-DrW_wCsc.js",
-      "_BranchOfficeForm-DFxb416n.js",
-      "_UserForm-QNRW7WQm.js",
-      "_RoleForm-CoQfI_wh.js",
+      "_BranchOfficeForm-D5c8wUM0.js",
+      "_UserForm-BxF9Q9em.js",
+      "_RoleForm-2MXn4-CV.js",
       "_branchSettings-BkuKlEHa.js",
       "_shared-CF6-mAjX.js"
     ]
   },
   "resources/js/Pages/Lottery/Limits.tsx": {
-    "file": "assets/Limits-5X7zMExl.js",
+    "file": "assets/Limits-CWhpeHkY.js",
     "name": "Limits",
     "src": "resources/js/Pages/Lottery/Limits.tsx",
     "isDynamicEntry": true,
@@ -785,8 +785,8 @@
       "_row-actions-DrW_wCsc.js",
       "_jsx-runtime-Wy9s6hX0.js",
       "_dist-C5PraWGu.js",
-      "_useQuery-Dx_AzkSN.js",
-      "_useMutation-BF4hIT04.js",
+      "_useQuery-faPyTe7m.js",
+      "_useMutation-CNDODWs7.js",
       "_removable-Dn901sO-.js",
       "resources/js/app.tsx",
       "_Modal-BrAi07by.js",
@@ -800,7 +800,7 @@
     ]
   },
   "resources/js/Pages/Lottery/LotteryDetail.tsx": {
-    "file": "assets/LotteryDetail-e-4nTWl8.js",
+    "file": "assets/LotteryDetail-BFIWU00q.js",
     "name": "LotteryDetail",
     "src": "resources/js/Pages/Lottery/LotteryDetail.tsx",
     "isDynamicEntry": true,
@@ -809,7 +809,7 @@
       "_data-table-9xUCtaoG.js",
       "_jsx-runtime-Wy9s6hX0.js",
       "_dist-C5PraWGu.js",
-      "_useQuery-Dx_AzkSN.js",
+      "_useQuery-faPyTe7m.js",
       "resources/js/app.tsx",
       "_arrow-left-Co9bFwqD.js",
       "_plus-BEhFPh0F.js",
@@ -820,14 +820,14 @@
     ]
   },
   "resources/js/Pages/Lottery/OpenCashModal.tsx": {
-    "file": "assets/OpenCashModal-CpCjURGv.js",
+    "file": "assets/OpenCashModal-Dz649RR-.js",
     "name": "OpenCashModal",
     "src": "resources/js/Pages/Lottery/OpenCashModal.tsx",
     "isDynamicEntry": true,
     "imports": [
       "_MoneyInput-C3rSO8pa.js",
       "_jsx-runtime-Wy9s6hX0.js",
-      "_useMutation-BF4hIT04.js",
+      "_useMutation-CNDODWs7.js",
       "_removable-Dn901sO-.js",
       "_dist-C5PraWGu.js",
       "_Modal-BrAi07by.js",
@@ -854,12 +854,12 @@
     ]
   },
   "resources/js/Pages/Lottery/PrintHistoryModal.tsx": {
-    "file": "assets/PrintHistoryModal-2UHaGJZz.js",
+    "file": "assets/PrintHistoryModal-C3nbsFRH.js",
     "name": "PrintHistoryModal",
     "src": "resources/js/Pages/Lottery/PrintHistoryModal.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_useQuery-Dx_AzkSN.js",
+      "_useQuery-faPyTe7m.js",
       "resources/js/app.tsx",
       "_Modal-BrAi07by.js",
       "_printer-DpDisBNO.js",
@@ -870,14 +870,14 @@
     ]
   },
   "resources/js/Pages/Lottery/PublishedResultsModal.tsx": {
-    "file": "assets/PublishedResultsModal-SGvhhsHn.js",
+    "file": "assets/PublishedResultsModal-C4vLoeqz.js",
     "name": "PublishedResultsModal",
     "src": "resources/js/Pages/Lottery/PublishedResultsModal.tsx",
     "isDynamicEntry": true,
     "imports": [
       "_jsx-runtime-Wy9s6hX0.js",
       "_Modal-BrAi07by.js",
-      "_useQuery-Dx_AzkSN.js",
+      "_useQuery-faPyTe7m.js",
       "resources/js/app.tsx",
       "_list-checks-DNIsGk_n.js",
       "_refresh-cw-Ca3m3Dup.js",
@@ -904,16 +904,16 @@
     ]
   },
   "resources/js/Pages/Lottery/Reports.tsx": {
-    "file": "assets/Reports-Btebt3GD.js",
+    "file": "assets/Reports-2g1lpRWP.js",
     "name": "Reports",
     "src": "resources/js/Pages/Lottery/Reports.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_ReportPdfModal-gV33QdqY.js",
+      "_ReportPdfModal-Dzx8EKWr.js",
       "_ComboboxSelect-CvF8XS6q.js",
       "_jsx-runtime-Wy9s6hX0.js",
       "_dist-C5PraWGu.js",
-      "_useQuery-Dx_AzkSN.js",
+      "_useQuery-faPyTe7m.js",
       "resources/js/app.tsx",
       "_AuthenticatedLayout-BOE9JqmC.js",
       "_createLucideIcon-iAjGl61D.js",
@@ -929,26 +929,26 @@
     ]
   },
   "resources/js/Pages/Lottery/ReprintTicketModal.tsx": {
-    "file": "assets/ReprintTicketModal-AhFoAJhA.js",
+    "file": "assets/ReprintTicketModal-B-_2Kx0Y.js",
     "name": "ReprintTicketModal",
     "src": "resources/js/Pages/Lottery/ReprintTicketModal.tsx",
     "isDynamicEntry": true,
     "imports": [
       "_jsx-runtime-Wy9s6hX0.js",
-      "_useMutation-BF4hIT04.js",
-      "_useQuery-Dx_AzkSN.js",
+      "_useMutation-CNDODWs7.js",
+      "_useQuery-faPyTe7m.js",
       "resources/js/app.tsx",
       "_Modal-BrAi07by.js",
       "_printer-DpDisBNO.js",
       "_x-ThCvaBmp.js",
       "_refresh-cw-Ca3m3Dup.js",
       "_data-table-9xUCtaoG.js",
-      "_IssuedTicketModal-DD27mxuO.js",
+      "_IssuedTicketModal-DBldgQf1.js",
       "_shared-CF6-mAjX.js"
     ]
   },
   "resources/js/Pages/Lottery/Results.tsx": {
-    "file": "assets/Results-Ci6buY34.js",
+    "file": "assets/Results-Ds4rnf7A.js",
     "name": "Results",
     "src": "resources/js/Pages/Lottery/Results.tsx",
     "isDynamicEntry": true,
@@ -966,8 +966,8 @@
       "_info-DF9G85Bk.js",
       "_check-7QcQMyGl.js",
       "_jsx-runtime-Wy9s6hX0.js",
-      "_useQuery-Dx_AzkSN.js",
-      "_useMutation-BF4hIT04.js",
+      "_useQuery-faPyTe7m.js",
+      "_useMutation-CNDODWs7.js",
       "_removable-Dn901sO-.js",
       "resources/js/app.tsx",
       "_data-table-9xUCtaoG.js",
@@ -976,7 +976,7 @@
     ]
   },
   "resources/js/Pages/Lottery/Sales.tsx": {
-    "file": "assets/Sales-DLu-hrGG.js",
+    "file": "assets/Sales-DVexLIX-.js",
     "name": "Sales",
     "src": "resources/js/Pages/Lottery/Sales.tsx",
     "isDynamicEntry": true,
@@ -991,7 +991,7 @@
       "_AuthenticatedLayout-BOE9JqmC.js",
       "resources/js/Pages/Lottery/ReprintTicketModal.tsx",
       "_PrinterSettingsModal-BFWs1AAI.js",
-      "_IssuedTicketModal-DD27mxuO.js",
+      "_IssuedTicketModal-DBldgQf1.js",
       "_playIdentity-BAioxbXS.js",
       "resources/js/Pages/Lottery/TicketCopyPreview.tsx",
       "resources/js/Pages/Lottery/SuperPairTargets.tsx",
@@ -1014,17 +1014,17 @@
       "_list-checks-DNIsGk_n.js",
       "_data-table-9xUCtaoG.js",
       "_requestId-Bd7_jZUn.js",
-      "_useQuery-Dx_AzkSN.js",
+      "_useQuery-faPyTe7m.js",
       "_removable-Dn901sO-.js",
       "resources/js/app.tsx",
       "_drawSchedule-t9Ls2kWT.js",
       "_dist-C5PraWGu.js",
-      "_useMutation-BF4hIT04.js",
+      "_useMutation-CNDODWs7.js",
       "_shared-CF6-mAjX.js"
     ]
   },
   "resources/js/Pages/Lottery/Settings.tsx": {
-    "file": "assets/Settings-CyOs2fQ3.js",
+    "file": "assets/Settings-ZoETrELY.js",
     "name": "Settings",
     "src": "resources/js/Pages/Lottery/Settings.tsx",
     "isDynamicEntry": true,
@@ -1076,7 +1076,7 @@
     ]
   },
   "resources/js/Pages/Lottery/TicketActionsModal.tsx": {
-    "file": "assets/TicketActionsModal-BEG9rp3n.js",
+    "file": "assets/TicketActionsModal-BfjpVKhD.js",
     "name": "TicketActionsModal",
     "src": "resources/js/Pages/Lottery/TicketActionsModal.tsx",
     "isDynamicEntry": true,
@@ -1085,8 +1085,8 @@
       "_Modal-BrAi07by.js",
       "_AuthenticatedLayout-BOE9JqmC.js",
       "_jsx-runtime-Wy9s6hX0.js",
-      "_useMutation-BF4hIT04.js",
-      "_useQuery-Dx_AzkSN.js",
+      "_useMutation-CNDODWs7.js",
+      "_useQuery-faPyTe7m.js",
       "_removable-Dn901sO-.js",
       "resources/js/app.tsx",
       "_tickets-DScPs4sD.js",
@@ -1096,7 +1096,7 @@
       "_check-7QcQMyGl.js",
       "_loader-circle-wWmsqaDV.js",
       "_key-round-PA-erGha.js",
-      "_PaymentPrintModal-DYWhLKNu.js",
+      "_PaymentPrintModal-7AHq2zGg.js",
       "_data-table-9xUCtaoG.js",
       "_shared-CF6-mAjX.js"
     ]
@@ -1114,7 +1114,7 @@
     ]
   },
   "resources/js/Pages/Lottery/Tickets.tsx": {
-    "file": "assets/Tickets-BRQd6fuG.js",
+    "file": "assets/Tickets-Bt9hqPkC.js",
     "name": "Tickets",
     "src": "resources/js/Pages/Lottery/Tickets.tsx",
     "isDynamicEntry": true,
@@ -1138,20 +1138,20 @@
       "_jsx-runtime-Wy9s6hX0.js",
       "_dist-C5PraWGu.js",
       "resources/js/app.tsx",
-      "_useMutation-BF4hIT04.js",
-      "_useQuery-Dx_AzkSN.js",
+      "_useMutation-CNDODWs7.js",
+      "_useQuery-faPyTe7m.js",
       "_removable-Dn901sO-.js",
       "_shared-CF6-mAjX.js"
     ]
   },
   "resources/js/Pages/Lottery/WinnersModal.tsx": {
-    "file": "assets/WinnersModal-D3J7XOkP.js",
+    "file": "assets/WinnersModal-BiY3i1vY.js",
     "name": "WinnersModal",
     "src": "resources/js/Pages/Lottery/WinnersModal.tsx",
     "isDynamicEntry": true,
     "imports": [
       "_jsx-runtime-Wy9s6hX0.js",
-      "_useQuery-Dx_AzkSN.js",
+      "_useQuery-faPyTe7m.js",
       "resources/js/app.tsx",
       "_trophy-JnnFtfcs.js",
       "_search-sdVUzAfb.js",
@@ -1226,26 +1226,26 @@
     ]
   },
   "resources/js/Pages/Settings/BranchOffices/Create.tsx": {
-    "file": "assets/Create-CDFx1bRq.js",
+    "file": "assets/Create-DSPOqlu2.js",
     "name": "Create",
     "src": "resources/js/Pages/Settings/BranchOffices/Create.tsx",
     "isDynamicEntry": true,
     "imports": [
       "_AuthenticatedLayout-BOE9JqmC.js",
       "_dist-C5PraWGu.js",
-      "_BranchOfficeForm-DFxb416n.js",
+      "_BranchOfficeForm-D5c8wUM0.js",
       "_jsx-runtime-Wy9s6hX0.js"
     ]
   },
   "resources/js/Pages/Settings/BranchOffices/Edit.tsx": {
-    "file": "assets/Edit-qJzUIkcB.js",
+    "file": "assets/Edit-DxwUyPX1.js",
     "name": "Edit",
     "src": "resources/js/Pages/Settings/BranchOffices/Edit.tsx",
     "isDynamicEntry": true,
     "imports": [
       "_AuthenticatedLayout-BOE9JqmC.js",
       "_dist-C5PraWGu.js",
-      "_BranchOfficeForm-DFxb416n.js",
+      "_BranchOfficeForm-D5c8wUM0.js",
       "_jsx-runtime-Wy9s6hX0.js"
     ]
   },
@@ -1267,7 +1267,7 @@
     ]
   },
   "resources/js/Pages/Settings/Offices/Create.tsx": {
-    "file": "assets/Create-DR2iq6AH.js",
+    "file": "assets/Create-224CyNBb.js",
     "name": "Create",
     "src": "resources/js/Pages/Settings/Offices/Create.tsx",
     "isDynamicEntry": true,
@@ -1280,7 +1280,7 @@
     ]
   },
   "resources/js/Pages/Settings/Offices/Edit.tsx": {
-    "file": "assets/Edit-CGCJUJh-.js",
+    "file": "assets/Edit-I2kkYZrW.js",
     "name": "Edit",
     "src": "resources/js/Pages/Settings/Offices/Edit.tsx",
     "isDynamicEntry": true,
@@ -1309,13 +1309,13 @@
     ]
   },
   "resources/js/Pages/Settings/Offices/OfficeForm.tsx": {
-    "file": "assets/OfficeForm-s57Pzhjw.js",
+    "file": "assets/OfficeForm-CdISYw7K.js",
     "name": "OfficeForm",
     "src": "resources/js/Pages/Settings/Offices/OfficeForm.tsx",
     "isDynamicEntry": true,
     "imports": [
       "_ComboboxSelect-CvF8XS6q.js",
-      "_BackLink-PRrizHKi.js",
+      "_BackLink-B5HtFcDm.js",
       "_TextInput-Bu7AXdqs.js",
       "_PrimaryButton-BJ0EL7W5.js",
       "_formatters-BMMw53Xh.js",
@@ -1329,7 +1329,7 @@
     ]
   },
   "resources/js/Pages/Settings/Roles/Create.tsx": {
-    "file": "assets/Create-D_znhrIC.js",
+    "file": "assets/Create-CZW_YqbH.js",
     "name": "Create",
     "src": "resources/js/Pages/Settings/Roles/Create.tsx",
     "isDynamicEntry": true,
@@ -1337,12 +1337,12 @@
       "_AuthenticatedLayout-BOE9JqmC.js",
       "_dist-C5PraWGu.js",
       "_createLucideIcon-iAjGl61D.js",
-      "_RoleForm-CoQfI_wh.js",
+      "_RoleForm-2MXn4-CV.js",
       "_jsx-runtime-Wy9s6hX0.js"
     ]
   },
   "resources/js/Pages/Settings/Roles/Edit.tsx": {
-    "file": "assets/Edit-DXXu-2e_.js",
+    "file": "assets/Edit-B9NPrmuQ.js",
     "name": "Edit",
     "src": "resources/js/Pages/Settings/Roles/Edit.tsx",
     "isDynamicEntry": true,
@@ -1350,7 +1350,7 @@
       "_AuthenticatedLayout-BOE9JqmC.js",
       "_dist-C5PraWGu.js",
       "_shield-check-BWG9VfH5.js",
-      "_RoleForm-CoQfI_wh.js",
+      "_RoleForm-2MXn4-CV.js",
       "_jsx-runtime-Wy9s6hX0.js"
     ]
   },
@@ -1372,7 +1372,7 @@
     ]
   },
   "resources/js/Pages/Settings/Users/Create.tsx": {
-    "file": "assets/Create-B3Q67Oep.js",
+    "file": "assets/Create-D1rpkrA7.js",
     "name": "Create",
     "src": "resources/js/Pages/Settings/Users/Create.tsx",
     "isDynamicEntry": true,
@@ -1380,12 +1380,12 @@
       "_AuthenticatedLayout-BOE9JqmC.js",
       "_dist-C5PraWGu.js",
       "_createLucideIcon-iAjGl61D.js",
-      "_UserForm-QNRW7WQm.js",
+      "_UserForm-BxF9Q9em.js",
       "_jsx-runtime-Wy9s6hX0.js"
     ]
   },
   "resources/js/Pages/Settings/Users/Edit.tsx": {
-    "file": "assets/Edit-DEyahgeK.js",
+    "file": "assets/Edit-BOWbmWmi.js",
     "name": "Edit",
     "src": "resources/js/Pages/Settings/Users/Edit.tsx",
     "isDynamicEntry": true,
@@ -1393,7 +1393,7 @@
       "_AuthenticatedLayout-BOE9JqmC.js",
       "_dist-C5PraWGu.js",
       "_user-cog-DiGLlOHq.js",
-      "_UserForm-QNRW7WQm.js",
+      "_UserForm-BxF9Q9em.js",
       "_jsx-runtime-Wy9s6hX0.js"
     ]
   },
@@ -1416,7 +1416,7 @@
     ]
   },
   "resources/js/app.tsx": {
-    "file": "assets/app-Cq-69Mfn.js",
+    "file": "assets/app-fwh6txl4.js",
     "name": "app",
     "src": "resources/js/app.tsx",
     "isEntry": true,
@@ -1438,12 +1438,12 @@
       "resources/js/Pages/Lottery/Catalog.tsx",
       "resources/js/Pages/Lottery/CatalogForms.tsx",
       "resources/js/Pages/Lottery/ConsortiumManagement.tsx",
-      "_IssuedTicketModal-DD27mxuO.js",
+      "_IssuedTicketModal-DBldgQf1.js",
       "resources/js/Pages/Lottery/Limits.tsx",
       "resources/js/Pages/Lottery/LotteryDetail.tsx",
       "resources/js/Pages/Lottery/OpenCashModal.tsx",
       "resources/js/Pages/Lottery/PaymentMethodsEditor.tsx",
-      "_PaymentPrintModal-DYWhLKNu.js",
+      "_PaymentPrintModal-7AHq2zGg.js",
       "resources/js/Pages/Lottery/PrintHistoryModal.tsx",
       "_PrinterSettingsModal-BFWs1AAI.js",
       "resources/js/Pages/Lottery/PublishedResultsModal.tsx",
@@ -1464,7 +1464,7 @@
       "resources/js/Pages/Profile/Partials/DeleteUserForm.tsx",
       "resources/js/Pages/Profile/Partials/UpdatePasswordForm.tsx",
       "resources/js/Pages/Profile/Partials/UpdateProfileInformationForm.tsx",
-      "_BranchOfficeForm-DFxb416n.js",
+      "_BranchOfficeForm-D5c8wUM0.js",
       "resources/js/Pages/Settings/BranchOffices/Create.tsx",
       "resources/js/Pages/Settings/BranchOffices/Edit.tsx",
       "resources/js/Pages/Settings/BranchOffices/Index.tsx",
@@ -1475,11 +1475,11 @@
       "resources/js/Pages/Settings/Roles/Create.tsx",
       "resources/js/Pages/Settings/Roles/Edit.tsx",
       "resources/js/Pages/Settings/Roles/Index.tsx",
-      "_RoleForm-CoQfI_wh.js",
+      "_RoleForm-2MXn4-CV.js",
       "resources/js/Pages/Settings/Users/Create.tsx",
       "resources/js/Pages/Settings/Users/Edit.tsx",
       "resources/js/Pages/Settings/Users/Index.tsx",
-      "_UserForm-QNRW7WQm.js"
+      "_UserForm-BxF9Q9em.js"
     ],
     "css": [
       "assets/app-Dlr5uZGJ.css"

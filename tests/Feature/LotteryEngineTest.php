@@ -18,6 +18,7 @@ use App\Services\Lottery\ResultService;
 use App\Services\Lottery\SaleService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -105,11 +106,76 @@ class LotteryEngineTest extends TestCase
         $this->assertNull($config->window($this->a, $at));
     }
 
+    public function test_lottery_timezone_is_inherited_and_draw_overrides_can_return_to_inheritance(): void
+    {
+        $lottery = $this->a->lottery;
+        $this->assertSame('America/Santo_Domingo', $lottery->timezone);
+        $this->assertNull($this->a->getRawOriginal('timezone'));
+        $admin = User::factory()->create();
+        $admin->roles()->attach(Role::where('slug', 'super_admin')->first()->id, ['office_id' => null]);
+        $request = ['id' => $lottery->id, 'name' => $lottery->name, 'active' => true, 'timezone' => 'America/New_York'];
+        $this->actingAs($this->seller)->postJson('/lottery/catalog/lotteries', $request)->assertForbidden();
+        $this->actingAs($admin)->postJson('/lottery/catalog/lotteries', $request)->assertOk()->assertJsonPath('lottery.timezone', 'America/New_York');
+        $inherited = $this->a->fresh();
+        $this->assertSame('America/New_York', $inherited->timezone);
+        $this->assertNull($inherited->timezone_override);
+        foreach (['2026-01-15' => '22:00', '2026-07-15' => '21:00'] as $date => $close) {
+            $inherited->closes_at = '21:00:00';
+            $window = app(Configuration::class)->window($inherited, CarbonImmutable::parse($date.' 20:00', 'America/Santo_Domingo'));
+            $this->assertSame($close, $window['closes_at']->setTimezone('America/Santo_Domingo')->format('H:i'));
+        }
+        $drawRequest = ['id' => $this->b->id, 'lottery_id' => $lottery->id, 'name' => 'B', 'active' => true,
+            'timezone' => 'America/Chicago', 'opens_at' => '06:00', 'closes_at' => '12:00', 'draws_at' => '12:05',
+            'weekdays' => [0, 1, 2, 3, 4, 5, 6], 'modalities' => ['quiniela']];
+        $this->postJson('/lottery/catalog/draws', $drawRequest)->assertOk();
+        $this->postJson('/lottery/catalog/lotteries', [...$request, 'timezone' => 'America/Port-au-Prince'])->assertOk();
+        $this->assertSame('America/Port-au-Prince', $this->a->fresh()->timezone);
+        $this->assertSame('America/Chicago', $this->b->fresh()->timezone);
+        $detail = $this->getJson('/lottery/catalog/lotteries/'.$lottery->id)->assertOk()->json('draws');
+        $byId = collect($detail)->keyBy('id');
+        $this->assertSame('America/Port-au-Prince', $byId[$this->a->id]['timezone']);
+        $this->assertNull($byId[$this->a->id]['timezone_override']);
+        $this->assertSame('America/Chicago', $byId[$this->b->id]['timezone_override']);
+        $this->postJson('/lottery/catalog/draws', [...$drawRequest, 'timezone' => null])->assertOk();
+        $this->assertNull($this->b->fresh()->getRawOriginal('timezone'));
+        $this->assertSame('America/Port-au-Prince', $this->b->fresh()->timezone);
+        $this->postJson('/lottery/catalog/lotteries', [...$request, 'timezone' => 'UTC-5'])->assertUnprocessable()->assertJsonValidationErrors('timezone');
+        $this->postJson('/lottery/catalog/lotteries', [...$request, 'timezone' => null])->assertUnprocessable()->assertJsonValidationErrors('timezone');
+        $this->postJson('/lottery/catalog/draws', [...$drawRequest, 'timezone' => 'invalid'])->assertUnprocessable()->assertJsonValidationErrors('timezone');
+        $this->postJson('/lottery/catalog/draws', [...$drawRequest, 'id' => null, 'name' => 'Nuevo heredado', 'timezone' => null])->assertOk();
+        $created = Draw::where('name', 'Nuevo heredado')->firstOrFail();
+        $this->assertSame('America/Port-au-Prince', $created->timezone);
+        $this->assertNull($created->timezone_override);
+    }
+
+    public function test_timezone_inheritance_migration_preserves_existing_zones_and_rolls_back_losslessly(): void
+    {
+        $migration = require database_path('migrations/2026_11_17_000001_inherit_draw_timezone_from_lottery.php');
+        $migration->down();
+        DB::table('draws')->whereIn('id', [$this->a->id, $this->b->id])->update(['timezone' => 'America/New_York']);
+        $mixedId = DB::table('lotteries')->insertGetId(['name' => 'Lotería con excepción', 'active' => true]);
+        $regular = $this->a->replicate()->fill(['lottery_id' => $mixedId, 'name' => 'Regular', 'timezone' => 'America/Santo_Domingo']);
+        $regular->save();
+        $exception = $this->b->replicate()->fill(['lottery_id' => $mixedId, 'name' => 'Excepción', 'timezone' => 'America/Port-au-Prince']);
+        $exception->save();
+        $before = DB::table('draws')->orderBy('id')->pluck('timezone', 'id')->all();
+        $migration->up();
+        $this->assertSame('America/New_York', $this->a->fresh()->lottery->timezone);
+        $this->assertNull($this->a->fresh()->getRawOriginal('timezone'));
+        $this->assertNull($regular->fresh()->getRawOriginal('timezone'));
+        $this->assertSame('America/Port-au-Prince', $exception->fresh()->timezone_override);
+        $this->assertSame($before, Draw::with('lottery')->orderBy('id')->get()->pluck('timezone', 'id')->all());
+        $migration->down();
+        $this->assertSame($before, DB::table('draws')->orderBy('id')->pluck('timezone', 'id')->all());
+        $migration->up();
+    }
+
     public function test_mixed_timezone_super_pale_matches_each_draw_date_across_midnight(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-11-17 00:15', 'America/Santo_Domingo'));
-        $this->a->update(['timezone' => 'America/New_York', 'opens_at' => '00:00:00', 'closes_at' => '23:30:00']);
-        $this->b->update(['opens_at' => '00:00:00', 'closes_at' => '01:00:00']);
+        $this->a->lottery->update(['timezone' => 'America/New_York']);
+        $this->a->update(['timezone' => null, 'opens_at' => '00:00:00', 'closes_at' => '23:30:00']);
+        $this->b->update(['timezone' => 'America/Santo_Domingo', 'opens_at' => '00:00:00', 'closes_at' => '01:00:00']);
         $ticket = $this->sell([$this->line(super: true)]);
         $line = $ticket->lines()->first();
         $this->assertSame('2026-11-17', $ticket->business_date);
@@ -132,7 +198,8 @@ class LotteryEngineTest extends TestCase
     public function test_automatic_import_respects_timezone_close_and_previous_local_date(): void
     {
         config(['cache.default' => 'array']);
-        $this->a->update(['timezone' => 'America/New_York', 'opens_at' => '00:00:00', 'closes_at' => '23:30:00', 'source_key' => 'resultados-a']);
+        $this->a->lottery->update(['timezone' => 'America/New_York']);
+        $this->a->update(['timezone' => null, 'opens_at' => '00:00:00', 'closes_at' => '23:30:00', 'source_key' => 'resultados-a']);
         $this->travelTo(CarbonImmutable::parse('2026-11-17 00:15', 'America/Santo_Domingo'));
         $ticket = $this->sell();
         $html = '<article class="inicio-tarjeta-hoy"><a href="/loteria/resultados-a">A</a><span class="tile-date">Lun, 16 nov</span><div class="tile-ball">10</div><div class="tile-ball">20</div><div class="tile-ball">30</div></article>';

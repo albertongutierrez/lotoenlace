@@ -57,7 +57,7 @@ class ImportLotteryResults extends Command
     private function importResults(BoletoganadorImporter $parser, Configuration $config, ResultService $service): int
     {
         $now = $config->clock();
-        $draws = Draw::where('active', true)->whereNotNull('source_key')->get()->flatMap(function ($draw) use ($config, $now) {
+        $draws = Draw::with('lottery')->where('active', true)->whereNotNull('source_key')->get()->flatMap(function ($draw) use ($config, $now) {
             $local = $now->setTimezone($draw->timezone ?? 'America/Santo_Domingo');
             $dates = [$local];
             $yesterday = $local->subDay();

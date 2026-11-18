@@ -8,7 +8,15 @@ import { notify } from "@/lib/notify";
 import { Field, Draw, input, button, secondary, modes } from "./shared";
 import { drawLocalDate, drawTime, systemTimezone } from '@/lib/drawSchedule';
 
-export type LotteryRow = { id: number; name: string; active: boolean; draws_count?: number };
+export type LotteryRow = { id: number; name: string; active: boolean; timezone?: string; draws_count?: number };
+const preferredTimezones: Record<string, string> = { [systemTimezone]: 'República Dominicana · Santo Domingo', 'America/New_York': 'Estados Unidos · Nueva York', 'America/Port-au-Prince': 'Haití · Puerto Príncipe', 'America/Chicago': 'Estados Unidos · Chicago', 'America/Los_Angeles': 'Estados Unidos · Los Ángeles' };
+function TimezoneSelect({ value, timezones, label, inheritZone, onChange }: { value: string | null; timezones: string[]; label: string; inheritZone?: string; onChange: (zone: string) => void }) {
+    const zones = [...new Set([...Object.keys(preferredTimezones), ...timezones, ...(value ? [value] : []), ...(inheritZone ? [inheritZone] : [])])];
+    return <ComboboxSelect aria-label={label} className={input} value={value ?? ''} onChange={e => onChange(e.target.value)}>
+        {inheritZone && <option value="">Heredar de la lotería · {inheritZone}</option>}
+        {zones.map(zone => <option key={zone} value={zone}>{preferredTimezones[zone] ? `${preferredTimezones[zone]} · ` : ''}{zone}</option>)}
+    </ComboboxSelect>;
+}
 export function Status({ active }: { active: boolean }) {
     return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${active ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`}>{active ? "Activa" : "Inactiva"}</span>;
 }
@@ -28,14 +36,16 @@ function Errors({ error }: { error: any }) {
     const messages = error.response?.data?.errors ? Object.values(error.response.data.errors).flat() : [error.response?.data?.message ?? "No se pudo guardar. Intenta nuevamente."];
     return <div role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-200"><ul className="list-inside list-disc">{messages.map((message, i) => <li key={i}>{String(message)}</li>)}</ul></div>;
 }
-export function LotteryEditor({ lottery, onClose }: { lottery?: LotteryRow; onClose: () => void }) {
-    const [form, setForm] = useState({ id: lottery?.id, name: lottery?.name ?? "", active: lottery?.active ?? true });
+export function LotteryEditor({ lottery, timezones = [], onClose }: { lottery?: LotteryRow; timezones?: string[]; onClose: () => void }) {
+    const [form, setForm] = useState({ id: lottery?.id, name: lottery?.name ?? "", active: lottery?.active ?? true, timezone: lottery?.timezone ?? systemTimezone });
     const save = useCatalogSave("/lottery/catalog/lotteries", onClose);
     return <Modal show onClose={onClose} closeable={!save.isPending} maxWidth="lg">
         <form className="space-y-5 p-6" onSubmit={event => { event.preventDefault(); save.mutate(form); }}>
             <Dialog.Title className="text-xl font-semibold">{lottery ? "Editar lotería" : "Nueva lotería"}</Dialog.Title>
             <Errors error={save.error} />
             <Field label="Nombre"><input autoFocus className={input} required maxLength={120} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></Field>
+            <Field label="Zona horaria de la lotería"><TimezoneSelect label="Zona horaria de la lotería" value={form.timezone} timezones={timezones} onChange={timezone => setForm({ ...form, timezone })} /></Field>
+            <p className="text-xs text-slate-500">Sus sorteos heredan esta zona por defecto. Al cambiarla se actualizan los que heredan; los sorteos con zona propia conservan su configuración.</p>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.active} onChange={e => setForm({ ...form, active: e.target.checked })} />Lotería activa</label>
             <p className="text-sm text-slate-500">Al desactivarla se detienen las ventas de todos sus sorteos. Los tickets y resultados anteriores se conservan.</p>
             <div className="flex justify-end gap-2"><button type="button" disabled={save.isPending} className={secondary} onClick={onClose}>Cancelar</button><button disabled={save.isPending} className={button}>{save.isPending ? "Guardando…" : "Guardar lotería"}</button></div>
@@ -43,15 +53,14 @@ export function LotteryEditor({ lottery, onClose }: { lottery?: LotteryRow; onCl
     </Modal>;
 }
 export function DrawEditor({ lottery, draw, timezones = [], onClose }: { lottery: LotteryRow; draw?: Draw; timezones?: string[]; onClose: () => void }) {
-    const [form, setForm] = useState<any>(draw ? { ...draw, abbreviation: draw.abbreviation ?? '', timezone: draw.timezone ?? systemTimezone, lottery_id: lottery.id, opens_at: draw.opens_at.slice(0, 5), closes_at: draw.closes_at.slice(0, 5), draws_at: draw.draws_at.slice(0, 5) } : {
-        lottery_id: lottery.id, name: "", abbreviation: '', timezone: systemTimezone, opens_at: "06:00", closes_at: "12:00", draws_at: "12:05",
+    const [form, setForm] = useState<any>(draw ? { ...draw, abbreviation: draw.abbreviation ?? '', timezone: draw.timezone_override !== undefined ? draw.timezone_override : draw.timezone ?? null, lottery_id: lottery.id, opens_at: draw.opens_at.slice(0, 5), closes_at: draw.closes_at.slice(0, 5), draws_at: draw.draws_at.slice(0, 5) } : {
+        lottery_id: lottery.id, name: "", abbreviation: '', timezone: null, opens_at: "06:00", closes_at: "12:00", draws_at: "12:05",
         weekdays: [0, 1, 2, 3, 4, 5, 6], modalities: ["quiniela", "pale", "tripleta"], active: true,
         source_url: "", source_key: "", result_count: 3, exceptions: {},
     });
     const [exceptionDate, setExceptionDate] = useState("");
-    const preferred: Record<string, string> = { [systemTimezone]: 'República Dominicana · Santo Domingo', 'America/New_York': 'Estados Unidos · Nueva York', 'America/Port-au-Prince': 'Haití · Puerto Príncipe', 'America/Chicago': 'Estados Unidos · Chicago', 'America/Los_Angeles': 'Estados Unidos · Los Ángeles' };
-    const zoneOptions = [...new Set([...Object.keys(preferred), ...timezones, form.timezone])];
-    const rdTime = (value: string) => value ? new Date(drawTime(drawLocalDate(new Date(), form.timezone), value, form.timezone)).toLocaleString('es-DO', { timeZone: systemTimezone, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+    const effectiveZone = form.timezone ?? lottery.timezone ?? systemTimezone;
+    const rdTime = (value: string) => value ? new Date(drawTime(drawLocalDate(new Date(), effectiveZone), value, effectiveZone)).toLocaleString('es-DO', { timeZone: systemTimezone, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
     const save = useCatalogSave("/lottery/catalog/draws", onClose);
     return <Modal show onClose={onClose} closeable={!save.isPending}>
         <form className="flex max-h-[85dvh] flex-col" onSubmit={e => { e.preventDefault(); save.mutate(form); }}>
@@ -74,7 +83,8 @@ export function DrawEditor({ lottery, draw, timezones = [], onClose }: { lottery
                             </Field>
                             <Field label="Abreviatura"><input className={input} maxLength={40} value={form.abbreviation} placeholder="Ej. ANG 6PM" onChange={e => setForm({ ...form, abbreviation: e.target.value })} /></Field>
                         </div>
-                        <Field label="Zona horaria del sorteo"><ComboboxSelect className={input} value={form.timezone} onChange={e => setForm({ ...form, timezone: e.target.value })}>{zoneOptions.map(zone => <option key={zone} value={zone}>{preferred[zone] ? `${preferred[zone]} · ` : ''}{zone}</option>)}</ComboboxSelect></Field>
+                        <Field label="Zona horaria del sorteo"><TimezoneSelect label="Zona horaria del sorteo" value={form.timezone} inheritZone={lottery.timezone ?? systemTimezone} timezones={timezones} onChange={zone => setForm({ ...form, timezone: zone || null })} /></Field>
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span>{form.timezone === null ? 'Heredada de la lotería' : 'Zona propia'} · {effectiveZone}</span>{form.timezone !== null && <button type="button" className="font-medium text-emerald-700 hover:underline dark:text-emerald-400" onClick={() => setForm({ ...form, timezone: null })}>Heredar de la lotería</button>}</div>
                         <p className="text-xs text-slate-500">Introduce las horas y días de la zona seleccionada. En ventas se usan los cierres equivalentes en RD. Si no hay abreviatura, se muestra el nombre completo.</p>
                         <div className="grid gap-4 sm:grid-cols-3">
                             {[

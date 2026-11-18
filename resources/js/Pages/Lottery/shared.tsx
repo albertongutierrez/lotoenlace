@@ -14,8 +14,9 @@ export type Draw = {
     name: string;
     abbreviation?: string | null;
     timezone?: string;
+    timezone_override?: string | null;
     lottery_id: number;
-    lottery?: { name: string; active?: boolean };
+    lottery?: { name: string; active?: boolean; timezone?: string };
     opens_at: string;
     closes_at: string;
     draws_at: string;

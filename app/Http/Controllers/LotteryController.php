@@ -72,7 +72,7 @@ class LotteryController extends Controller
 
 
 
-        $data = ['lotteries' => Lottery::withCount('draws')->orderBy('name')->get()];
+        $data = ['lotteries' => Lottery::withCount('draws')->orderBy('name')->get(), 'timezones' => \DateTimeZone::listIdentifiers()];
 
 
 
@@ -88,7 +88,7 @@ class LotteryController extends Controller
 
         abort_unless($r->user()->isSuperAdmin(), 403);
 
-        $data = ['lottery' => $lottery, 'draws' => $lottery->draws()->orderBy('draws_at')->get(), 'timezones' => \DateTimeZone::listIdentifiers()];
+        $data = ['lottery' => $lottery, 'draws' => $lottery->draws()->with('lottery')->orderBy('draws_at')->get(), 'timezones' => \DateTimeZone::listIdentifiers()];
 
 
 
@@ -104,7 +104,8 @@ class LotteryController extends Controller
 
         abort_unless($r->user()->isSuperAdmin(), 403);
 
-        $data = $r->validate(['id' => 'nullable|integer|exists:lotteries,id', 'name' => 'required|string|max:120', 'active' => 'required|boolean']);
+        $data = $r->validate(['id' => 'nullable|integer|exists:lotteries,id', 'name' => 'required|string|max:120', 'active' => 'required|boolean',
+            'timezone' => ['sometimes', 'required', Rule::in(\DateTimeZone::listIdentifiers())]]);
 
         $lottery = Lottery::updateOrCreate(['id' => $data['id'] ?? null], $data);
 
@@ -124,7 +125,7 @@ class LotteryController extends Controller
 
         $data = $r->validate(['id' => 'nullable|integer|exists:draws,id', 'lottery_id' => 'required|exists:lotteries,id', 'name' => 'required|string|max:120',
 
-            'abbreviation' => 'nullable|string|max:40', 'timezone' => ['sometimes', 'required', Rule::in(\DateTimeZone::listIdentifiers())],
+            'abbreviation' => 'nullable|string|max:40', 'timezone' => ['sometimes', 'nullable', Rule::in(\DateTimeZone::listIdentifiers())],
 
             'opens_at' => 'required|date_format:H:i', 'closes_at' => 'required|date_format:H:i|after:opens_at', 'draws_at' => 'required|date_format:H:i|after_or_equal:closes_at',
 
