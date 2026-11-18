@@ -28,3 +28,22 @@ export function copyToSelected(lines: CopyLine[], selected: number[], pairs: [nu
     if (copied.length > 500) throw Error('Máximo 500 jugadas por ticket. Reduce los destinos seleccionados.');
     return copied;
 }
+
+export function applyCopiedLines(current: CopyLine[], copied: CopyLine[], preserve = true): CopyLine[] {
+    const result = preserve ? current.map(line => ({...line})) : [];
+    const positions = new Map(result.map((line, index) => [playIdentity(line), index]));
+    for (const line of copied) {
+        const key = playIdentity(line);
+        const index = positions.get(key);
+        if (index === undefined) {
+            positions.set(key, result.length);
+            result.push({...line});
+        } else {
+            const total = Math.round(Number(result[index].amount) * 100) + Math.round(Number(line.amount) * 100);
+            if (!Number.isSafeInteger(total) || total > 99_999_999_999) throw Error(`El monto acumulado de ${line.numbers} supera el máximo permitido.`);
+            result[index].amount = (total / 100).toFixed(2);
+        }
+    }
+    if (result.length > 500) throw Error('Máximo 500 jugadas por ticket, contando las jugadas actuales.');
+    return result;
+}

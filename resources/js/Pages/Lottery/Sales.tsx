@@ -10,8 +10,9 @@ import ReprintTicketModal from "./ReprintTicketModal";
 import PrinterSettingsModal from "./PrinterSettingsModal";
 import IssuedTicketModal from "./IssuedTicketModal";
 import { newPlays, playIdentity } from "@/lib/playIdentity";
-import { copyToSelected, ticketCopyTemplates } from '@/lib/ticketCopy';
+import { applyCopiedLines, copyToSelected, ticketCopyTemplates } from '@/lib/ticketCopy';
 import SuperPairTargets from './SuperPairTargets';
+import TicketCopyPreview from './TicketCopyPreview';
 import TicketActionsModal from "./TicketActionsModal";
 import WinnersModal from "./WinnersModal";
 import Modal from "@/Components/Modal";
@@ -509,6 +510,13 @@ function SalesWorkspace({
     const [duplicateTargets, setDuplicateTargets] = useState<Record<number, number>>( {} );
     const [duplicateMode, setDuplicateMode] = useState(settings.ticket_copy_mode ?? 'original');
     const [duplicateAmounts, setDuplicateAmounts] = useState<Record<string, string>>({});
+    const duplicatePreferenceKey = `lotoenlace:duplicate-preserve:${auth.user.id}:${branch.id}`;
+    const [preserveDuplicateLines, setPreserveDuplicateLines] = useState(() => {
+        try { return localStorage.getItem(duplicatePreferenceKey) !== 'false'; } catch { return true; }
+    });
+    useEffect(() => {
+        try { localStorage.setItem(duplicatePreferenceKey, String(preserveDuplicateLines)); } catch { /* Keep the choice in memory when browser storage is unavailable. */ }
+    }, [duplicatePreferenceKey, preserveDuplicateLines]);
     const duplicateTemplates = ticketCopyTemplates(duplicateSource ?? []);
     const duplicate = async () => {
         if (duplicateBusyRef.current) return;
@@ -564,9 +572,12 @@ function SalesWorkspace({
                     if (!settings.pairs?.[pair]?.enabled) throw Error("La pareja de destino no está habilitada para súper palé.");
                 }
             }
-            if (copied.length > 500) throw Error('Máximo 500 jugadas por ticket. Reduce los destinos seleccionados.');
-            setLines(copied);
-            if (duplicateMode === 'original') setSelected([...new Set(copied.filter(line => line.modality !== 'super_pale').map(line => line.draw_id))]);
+            const updated = applyCopiedLines(lines, copied, preserveDuplicateLines);
+            setLines(updated);
+            if (duplicateMode === 'original') {
+                const destinations = copied.filter(line => line.modality !== 'super_pale').map(line => line.draw_id);
+                setSelected(current => [...new Set([...(preserveDuplicateLines ? current : []), ...destinations])]);
+            }
             finishSuperPaleEntry(copied);
             requestKey.current = requestId();
             setMessage('');
@@ -839,14 +850,15 @@ function SalesWorkspace({
             {publishedResultsOpen && <PublishedResultsModal branchId={branch.id} userId={auth.user.id} onClose={() => { setPublishedResultsOpen(false); requestAnimationFrame(() => numbersRef.current?.focus()); }} />}
             {printerSettingsOpen && <PrinterSettingsModal branchId={branch.id} onClose={() => setPrinterSettingsOpen(false)} />}
             {winnersOpen && <WinnersModal show onClose={() => setWinnersOpen(false)} userId={auth.user.id} branchId={branch.id} draws={draws} />}
-            <Modal show={duplicateOpen} maxWidth="lg" closeable={!duplicating} onClose={() => setDuplicateOpen(false)} afterLeave={() => { requestAnimationFrame(() => numbersRef.current?.focus()); }}>
-                <form onSubmit={e => { e.preventDefault(); void duplicate(); }} onKeyDown={e => { if (e.key === "Enter" && (e.repeat || e.nativeEvent.isComposing)) e.preventDefault(); }} className="text-slate-900 dark:text-slate-100">
-                    <div className="flex items-start gap-3 border-b border-slate-200 p-5 dark:border-slate-700">
+            <Modal show={duplicateOpen} maxWidth="5xl" closeable={!duplicating} onClose={() => setDuplicateOpen(false)} afterLeave={() => { requestAnimationFrame(() => numbersRef.current?.focus()); }}>
+                <form onSubmit={e => { e.preventDefault(); void duplicate(); }} onKeyDown={e => { if (e.key === "Enter" && (e.repeat || e.nativeEvent.isComposing)) e.preventDefault(); }} className="flex max-h-[calc(100dvh-5rem)] flex-col text-slate-900 dark:text-slate-100">
+                    <div className="flex shrink-0 items-start gap-3 border-b border-slate-200 p-5 dark:border-slate-700">
                         <div className="rounded-xl bg-emerald-100 p-3 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400"><Copy className="h-6 w-6" /></div>
                         <div className="flex-1"><h2 className="text-lg font-semibold">Duplicar ticket</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Carga sus jugadas para preparar una nueva venta.</p></div>
                         <button type="button" disabled={duplicating} onClick={() => setDuplicateOpen(false)} aria-label="Cerrar" className="rounded-md p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"><X className="h-5 w-5" /></button>
                     </div>
-                    <div className="space-y-4 p-5">
+                    <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto md:grid-cols-2 md:overflow-hidden">
+                    <div className="min-h-0 space-y-4 p-4 md:overflow-y-auto [scrollbar-width:thin]">
                         {duplicating && <LoadingSkeleton compact />}
                         {!!settings.show_qr && <div role="group" aria-label="Buscar ticket por" className="grid grid-cols-2 gap-2">
                             {([['number', 'Número de ticket', Tickets], ['qr', 'Código QR', QrCode]] as const).map(([method, title, Icon]) => <button key={method} type="button" aria-pressed={duplicateMethod === method} disabled={duplicating} className={duplicateMethod === method ? button : secondary} onClick={() => {
@@ -862,6 +874,7 @@ function SalesWorkspace({
                             <p id="duplicate-ticket-help" className="text-xs text-slate-500 dark:text-slate-400">{duplicateUsesQr ? "Escanea o pega el QR: se consultará automáticamente. Después pulsa Enter para cargar las jugadas." : `Usa el número impreso en el ticket de ${settings.copy_consortium_tickets ? 'cualquier banca de este consorcio' : 'esta banca'}, con o sin T-.`}</p>
                         </div>
                         {duplicateError && <p id="duplicate-ticket-error" role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{duplicateError}</p>}
+                        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700"><input type="checkbox" aria-label="Conservar jugadas actuales" aria-describedby="duplicate-preserve-help" className="mt-0.5 rounded border-slate-400 text-emerald-600" checked={preserveDuplicateLines} disabled={duplicating} onChange={e=>setPreserveDuplicateLines(e.target.checked)} /><span className="text-sm"><span className="block font-semibold">Conservar jugadas actuales</span><span id="duplicate-preserve-help" className="mt-1 block text-xs text-slate-500">{preserveDuplicateLines ? 'Añade las jugadas del ticket. Las repetidas suman su monto.' : 'Reemplaza las jugadas actuales por las del ticket.'}</span></span></label>
                         <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">{duplicateMode === 'selected' ? 'Las jugadas regulares se copian a los sorteos marcados y los súper palés a las parejas elegidas.' : 'Consulta el ticket y elige a qué sorteo abierto trasladar cada grupo de jugadas.'} El ticket original se conserva; la nueva venta se emite al pulsar Vender.</div>
                         {duplicateSource && <div className="space-y-3">
                             <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">Ticket {duplicateReference} · {duplicateSource.length === 1 ? "1 jugada encontrada" : `${duplicateSource.length} jugadas encontradas`}</p>
@@ -885,9 +898,11 @@ function SalesWorkspace({
                             })}
                             </>}
                         </div>}
-                        {lines.length > 0 && <p className="text-sm text-amber-700 dark:text-amber-300">Al cargar el ticket se reemplazarán las {lines.length} jugadas actuales.</p>}
+                        {lines.length > 0 && <p className={`text-xs ${preserveDuplicateLines ? 'text-slate-500' : 'text-amber-700 dark:text-amber-300'}`}>{preserveDuplicateLines ? `Se conservarán las ${lines.length} jugadas actuales.` : `Al cargar el ticket se reemplazarán las ${lines.length} jugadas actuales.`}</p>}
                     </div>
-                    <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-700 dark:bg-slate-900">
+                    <TicketCopyPreview lines={duplicateSource} mode={duplicateMode} currency={currency} amounts={duplicateAmounts} drawName={nameForDraw} />
+                    </div>
+                    <div className="flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-700 dark:bg-slate-900">
                         <button type="button" className={secondary} disabled={duplicating} onClick={() => setDuplicateOpen(false)}><X className="mr-2 inline h-4 w-4" />Cancelar</button>
                         <button ref={duplicateSubmitRef} type="submit" className={button} disabled={duplicating || !duplicateCode.trim()}>{duplicating ? <LoaderCircle className="mr-2 inline h-4 w-4 animate-spin" /> : <Copy className="mr-2 inline h-4 w-4" />}{duplicating ? "Cargando…" : duplicateSource ? "Cargar jugadas" : "Consultar ticket"}</button>
                     </div>

@@ -19,7 +19,7 @@ export default function Modal({
 
     show: boolean;
 
-    maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '7xl';
+    maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '5xl' | '7xl';
 
     closeable?: boolean;
 
@@ -49,6 +49,7 @@ export default function Modal({
         xl: 'sm:max-w-xl',
 
         '2xl': 'sm:max-w-2xl',
+        '5xl': 'sm:max-w-5xl',
         '7xl': 'sm:max-w-[95vw] xl:max-w-7xl',
 
     }[maxWidth];

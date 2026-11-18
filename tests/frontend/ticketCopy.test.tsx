@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { copyToSelected, ticketCopyTemplates, CopyLine } from '../../resources/js/lib/ticketCopy';
+import { applyCopiedLines, copyToSelected, ticketCopyTemplates, CopyLine } from '../../resources/js/lib/ticketCopy';
 
 const regular: CopyLine = { draw_id: 11, modality: 'quiniela', numbers: '07', amount: '2.50' };
 const superLine: CopyLine = { draw_id: 11, second_draw_id: 12, modality: 'super_pale', numbers: '10-20', amount: '3.00' };
@@ -33,4 +33,22 @@ test('los montos distintos requieren una elección y las combinaciones regulares
 test('la expansión de destinos respeta el máximo del ticket', () => {
     const source = Array.from({length:251}, (_, i)=>({...regular, numbers:String(i)}));
     expect(()=>copyToSelected(source, [1,2], [])).toThrow('Máximo 500');
+});
+
+test('conservar añade las jugadas y acumula repetidas sin modificar los datos originales', () => {
+    const current = [regular, superLine];
+    const copied = [{...regular, amount:'1.25'}, {...regular, draw_id:12}];
+    const snapshot = structuredClone(current);
+    expect(applyCopiedLines(current,copied)).toEqual([{...regular,amount:'3.75'},superLine,copied[1]]);
+    expect(current).toEqual(snapshot);
+    expect(copied[0].amount).toBe('1.25');
+    expect(applyCopiedLines(current,copied,false)).toEqual(copied);
+});
+
+test('conservar respeta el máximo de jugadas después de combinar y evita exceder el monto permitido', () => {
+    const full = Array.from({length:500},(_,i)=>({...regular,draw_id:i+1}));
+    expect(applyCopiedLines(full,[regular])).toHaveLength(500);
+    expect(()=>applyCopiedLines(full,[{...regular,draw_id:501}])).toThrow('Máximo 500');
+    expect(()=>applyCopiedLines([{...regular,amount:'999999999.99'}],[regular])).toThrow('máximo permitido');
+    expect(applyCopiedLines(full,[regular],false)).toEqual([regular]);
 });

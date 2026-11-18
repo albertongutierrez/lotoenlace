@@ -1,0 +1,1 @@
+function e(e){let t=e.numbers.split(`-`);return(e.modality===`pale`||e.modality===`tripleta`)&&t.sort(),[e.draw_id,e.second_draw_id??``,e.modality,t.join(`-`)].join(`:`)}function t(t,n){let r=new Set(t.map(e));return n.filter(t=>{let n=e(t);return!r.has(n)&&(r.add(n),!0)})}export{e as n,t};

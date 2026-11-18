@@ -24,6 +24,7 @@ beforeAll(() => {
 });
 beforeEach(() => {
     sessionStorage.clear();
+    localStorage.clear();
     vi.mocked(axios.get).mockResolvedValue({ data: { current: { id: 1 } } });
     vi.mocked(axios.post).mockReset().mockImplementation(async (url, payload:any) => ({data: String(url) === '/lottery/availability/batch'
         ? {results:payload.lines.map(()=>({available_minor:null, accepted:true, error:null})), server_now:new Date().toISOString()}
@@ -329,6 +330,41 @@ test('Duplicar permite completar los destinos de ambos tipos dentro de la modal 
     await user.click(within(picker).getByRole('button', {name:'Sorteo 2', exact:true}));
     await user.click(screen.getByRole('button', {name:'Cargar jugadas'}));
     await waitFor(()=>expect(draftLines()).toHaveLength(2));
+});
+
+test('Duplicar conserva por defecto, permite reemplazar y recuerda la elección después de recargar', async () => {
+    mockDuplicateTicket();
+    const user = await mount();
+    await user.click(screen.getByRole('button',{name:/^Sorteo 1/}));
+    await enterPlay(user,'07'); await enterPlay(user,'10');
+    await user.click(screen.getByRole('button',{name:/^Sorteo 2/}));
+    await user.click(screen.getByRole('button',{name:'Duplicar F4'}));
+    expect((await screen.findByRole('checkbox',{name:'Conservar jugadas actuales'}) as HTMLInputElement).checked).toBe(true);
+    await user.type(screen.getByLabelText('Número del ticket'),'12');
+    await user.keyboard('{Enter}');
+    await screen.findByRole('table',{name:'Detalle del ticket a copiar'});
+    await user.click(screen.getByRole('button',{name:'Cargar jugadas'}));
+    await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
+    expect(draftLines().map((line:any)=>[line.numbers,line.amount])).toEqual([['07','3.50'],['10','1']]);
+    let saved = JSON.parse(sessionStorage.getItem(storageKey)!);
+    expect(saved.drafts.find((draft:any)=>draft.id===saved.activeId).selected).toEqual([1,2]);
+
+    await user.click(screen.getByRole('button',{name:'Duplicar F4'}));
+    await user.click(await screen.findByRole('checkbox',{name:'Conservar jugadas actuales'}));
+    await user.type(screen.getByLabelText('Número del ticket'),'12');
+    await user.keyboard('{Enter}');
+    await screen.findByRole('table',{name:'Detalle del ticket a copiar'});
+    await user.click(screen.getByRole('button',{name:'Cargar jugadas'}));
+    await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
+    expect(draftLines().map((line:any)=>[line.numbers,line.amount])).toEqual([['07','2.50']]);
+    saved = JSON.parse(sessionStorage.getItem(storageKey)!);
+    expect(saved.drafts.find((draft:any)=>draft.id===saved.activeId).selected).toEqual([1]);
+
+    cleanup();
+    const reloaded = await mount();
+    await reloaded.click(screen.getByRole('button',{name:'Duplicar F4'}));
+    expect((await screen.findByRole('checkbox',{name:'Conservar jugadas actuales'}) as HTMLInputElement).checked).toBe(false);
+    expect(localStorage.getItem('lotoenlace:duplicate-preserve:1:1')).toBe('false');
 });
 
 test('Súper palé oculta sorteos incompatibles y sin parejas habilitadas y comparte las tarjetas compactas con regulares', async () => {
