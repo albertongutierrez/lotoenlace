@@ -26,8 +26,8 @@ export function createAgentServer({ config, queue, listPrinters, onShutdown }) {
         res.setHeader('Access-Control-Max-Age', '600'); res.writeHead(204); res.end(); return;
       }
       if (!sameToken(req.headers.authorization, `Bearer ${config.token}`)) throw new AgentError(401, 'La clave de conexión no es correcta.');
-      if (req.method === 'GET' && req.url === '/health') return reply(200, { service: 'LotoEnlace Print Agent', version: '1.3.0', capabilities: { text_sizes: ['small', 'normal', 'large'] }, device_id: config.deviceId, issuer: config.issuer, pid: process.pid, busy: queue.isBusy?.() ?? false, status: stopping ? 'stopping' : 'running', controls: true });
-      if (req.method === 'GET' && req.url === '/printers') return reply(200, { printers: await listPrinters(), capabilities: { text_sizes: ['small', 'normal', 'large'] }, device_id: config.deviceId, issuer: config.issuer });
+      if (req.method === 'GET' && req.url === '/health') return reply(200, { service: 'LotoEnlace Print Agent', version: '1.4.0', capabilities: { text_sizes: ['small', 'normal', 'large'], wagers_per_row: [1, 2] }, device_id: config.deviceId, issuer: config.issuer, pid: process.pid, busy: queue.isBusy?.() ?? false, status: stopping ? 'stopping' : 'running', controls: true });
+      if (req.method === 'GET' && req.url === '/printers') return reply(200, { printers: await listPrinters(), capabilities: { text_sizes: ['small', 'normal', 'large'], wagers_per_row: [1, 2] }, device_id: config.deviceId, issuer: config.issuer });
       if (req.method === 'POST' && req.url === '/control/stop') {
         await readJson(req);
         if (!onShutdown) throw new AgentError(501, 'El control del servicio no está disponible.');

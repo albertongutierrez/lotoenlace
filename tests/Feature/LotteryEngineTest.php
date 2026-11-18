@@ -1642,11 +1642,12 @@ class LotteryEngineTest extends TestCase
             $this->assertNotSame($paymentId, $second->json('payment_receipt.payment_id'));
             $request = ['attempt_key' => (string) Str::uuid(), 'trigger' => 'automatic', 'transport' => 'local',
                 'device_id' => (string) Str::uuid(), 'printer' => 'Térmica USB', 'profile' => 'epson', 'paper_width' => 80, 'cut' => true,
-                'document_type' => 'payout', 'payment_id' => $paymentId];
+                'document_type' => 'payout', 'payment_id' => $paymentId, 'wagers_per_row' => 2];
             $printUrl = '/lottery/tickets/'.$ticket->code.'/print';
             $printed = $this->postJson($printUrl, $request)->assertOk()->assertJsonPath('sequence', 1)->assertJsonPath('net_minor', 7500)->assertJsonMissingPath('ticket_pin');
             $data = json_decode(base64_decode($printed->json('authorization.payload')), true);
             $this->assertSame('payout', $data['receipt']['document_type']);
+            $this->assertSame(2, $data['target']['wagers_per_row']);
             $this->assertSame(7500, $data['receipt']['net_minor']);
             $this->assertCount(1, $data['receipt']['lines']);
             $this->assertSame('10', $data['receipt']['lines'][0]['numbers']);
@@ -1708,9 +1709,10 @@ class LotteryEngineTest extends TestCase
             $payment->update(['payload' => $payload]);
             $request = ['attempt_key' => (string) Str::uuid(), 'trigger' => 'automatic', 'transport' => 'local',
                 'device_id' => (string) Str::uuid(), 'printer' => 'Térmica USB', 'profile' => 'epson', 'paper_width' => 80, 'cut' => true,
-                'document_type' => 'continuation', 'payment_id' => $paymentId];
+                'document_type' => 'continuation', 'payment_id' => $paymentId, 'wagers_per_row' => 2];
             $printUrl = '/lottery/tickets/'.$ticket->code.'/print';
             $printed = $this->postJson($printUrl, $request)->assertOk()->assertJsonPath('ticket_pin', $firstPin);
+            $this->assertSame(2, json_decode(base64_decode($printed->json('authorization.payload')), true)['target']['wagers_per_row']);
             $receipt = json_decode(base64_decode($printed->json('authorization.payload')), true)['receipt'];
             $this->assertSame($firstPin, $receipt['pin']); $this->assertSame('continuation', $receipt['document_type']);
             $this->assertSame(['20', '10-20'], array_column($receipt['lines'], 'numbers'));
@@ -1944,7 +1946,7 @@ class LotteryEngineTest extends TestCase
             $ticket = $this->sell();
             $ticket->update(['payment_pin' => '000042']);
             $request = ['attempt_key' => (string) Str::uuid(), 'trigger' => 'automatic', 'transport' => 'local',
-                'device_id' => (string) Str::uuid(), 'printer' => 'Térmica USB', 'profile' => 'epson', 'paper_width' => 80, 'cut' => true, 'feed_lines' => 0, 'text_size' => 'large'];
+                'device_id' => (string) Str::uuid(), 'printer' => 'Térmica USB', 'profile' => 'epson', 'paper_width' => 80, 'cut' => true, 'feed_lines' => 0, 'text_size' => 'large', 'wagers_per_row' => 2];
             $url = '/lottery/tickets/'.$ticket->code.'/print';
             $this->actingAs($this->seller);
             $response = $this->postJson($url, $request)->assertOk();
@@ -1959,6 +1961,7 @@ class LotteryEngineTest extends TestCase
             $this->assertSame($request['device_id'], $data['target']['device_id']);
             $this->assertSame(0, $data['target']['feed_lines']);
             $this->assertSame('large', $data['target']['text_size']);
+            $this->assertSame(2, $data['target']['wagers_per_row']);
             $this->assertSame($ticket->lines()->first()->draw_id, $data['receipt']['lines'][0]['draw_id']);
             $this->assertSame('A', $data['receipt']['lines'][0]['draw']);
             $this->assertLessThanOrEqual(120, $data['expires_at'] - $data['issued_at']);
@@ -1967,6 +1970,8 @@ class LotteryEngineTest extends TestCase
             $this->postJson($url, [...$request, 'printer' => 'Otra impresora'])->assertStatus(409);
             $this->postJson($url, [...$request, 'feed_lines' => 3])->assertStatus(409);
             $this->postJson($url, [...$request, 'text_size' => 'small'])->assertStatus(409);
+            $this->postJson($url, [...$request, 'wagers_per_row' => 1])->assertStatus(409);
+            foreach ([0, 3, 1.5] as $invalidLayout) $this->postJson($url, [...$request, 'wagers_per_row' => $invalidLayout])->assertUnprocessable()->assertJsonValidationErrors('wagers_per_row');
             $this->postJson($url, [...$request, 'text_size' => 'huge'])->assertUnprocessable()->assertJsonValidationErrors('text_size');
             foreach ([-1, 16, 1.5] as $invalidFeed) $this->postJson($url, [...$request, 'feed_lines' => $invalidFeed])->assertUnprocessable()->assertJsonValidationErrors('feed_lines');
             $this->postJson('/lottery/tickets/'.$ticket->code.'/print-status', ['attempt_key' => $request['attempt_key'], 'status' => 'submitted', 'spool_job_id' => 42])->assertOk();

@@ -14,6 +14,7 @@ export default function PrinterSettingsModal({ branchId, onClose }: { branchId: 
     const [printers, setPrinters] = useState<LocalPrinter[]>([]);
     const [deviceId, setDeviceId] = useState('');
     const [textSizes, setTextSizes] = useState<string[]>(['normal']);
+    const [wagerLayouts, setWagerLayouts] = useState<number[]>([1]);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const connect = async () => {
@@ -24,6 +25,7 @@ export default function PrinterSettingsModal({ branchId, onClose }: { branchId: 
             if (new URL(data.issuer).origin !== window.location.origin) throw new Error('El agente está vinculado a otro sistema.');
             setPrinters(data.printers); setDeviceId(data.device_id);
             setTextSizes(data.capabilities?.text_sizes ?? ['normal']);
+            setWagerLayouts(data.capabilities?.wagers_per_row ?? [1]);
             const current = data.printers.find((p: LocalPrinter) => p.name === preference.printer);
             setPreference(p => ({ ...p, printer: current && !current.virtual ? current.name : '' }));
         } catch (e: any) { setPrinters([]); setError(e.message ?? 'No se pudieron consultar las impresoras.'); }
@@ -31,7 +33,8 @@ export default function PrinterSettingsModal({ branchId, onClose }: { branchId: 
     };
     const validFeed = Number.isInteger(preference.feed_lines) && preference.feed_lines! >= 0 && preference.feed_lines! <= 15;
     const validSize = textSizes.includes(preference.text_size ?? 'normal');
-    const canSave = validFeed && validSize && deviceId && printers.some(p => p.name === preference.printer && !p.virtual && !p.offline);
+    const validLayout = wagerLayouts.includes(preference.wagers_per_row ?? 1);
+    const canSave = validFeed && validSize && validLayout && deviceId && printers.some(p => p.name === preference.printer && !p.virtual && !p.offline);
     return <Modal show onClose={onClose} closeable={!busy} maxWidth="2xl"><form className="text-slate-900 dark:text-slate-100" onSubmit={e => {
         e.preventDefault(); if (!canSave || busy) return;
         try { savePrinterPreference(branchId, preference, deviceId ? { token: token.trim(), deviceId } : undefined); onClose(); } catch { setError('El navegador no permitió guardar la configuración de esta PC.'); }
@@ -51,6 +54,10 @@ export default function PrinterSettingsModal({ branchId, onClose }: { branchId: 
                 <label className="block text-sm">Tamaño de texto del ticket<ComboboxSelect aria-label="Tamaño de texto del ticket" className={input} value={preference.text_size ?? 'normal'} onChange={e => setPreference(p => ({ ...p, text_size: e.target.value as 'small' | 'normal' | 'large' }))}><option value="small">Pequeño</option><option value="normal">Normal</option><option value="large">Grande</option></ComboboxSelect></label>
                 <p className="text-xs text-slate-500">Grande aumenta la altura del texto y conserva las columnas en papel de 58 y 80 mm.</p>
                 {deviceId && !validSize && <p role="alert" className="text-sm text-amber-600">Actualiza el agente de esta PC con el paquete descargable para usar este tamaño de texto.</p>}
+                <label className="block text-sm">Distribución de jugadas<ComboboxSelect aria-label="Distribución de jugadas" className={input} value={preference.wagers_per_row ?? 1} onChange={e => setPreference(p => ({ ...p, wagers_per_row: Number(e.target.value) as 1 | 2 }))}><option value={1}>Fila simple · una jugada por línea</option><option value={2}>Doble fila · dos jugadas por línea</option></ComboboxSelect></label>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950"><pre className="whitespace-pre text-center font-mono text-xs">{preference.wagers_per_row === 2 ? '12-25 RD$10 | 01-12 RD$10' : '12-25          RD$10\n01-12          RD$10'}</pre></div>
+                <p className="text-xs text-slate-500">Doble fila ahorra papel en 58 y 80 mm. Si una jugada o su monto no cabe, ocupa una línea completa.</p>
+                {deviceId && !validLayout && <p role="alert" className="text-sm text-amber-600">Actualiza el agente de esta PC con el paquete descargable para usar doble fila.</p>}
                 <p className="text-xs text-slate-500">El agente requiere una impresora térmica compatible con el lenguaje elegido. Windows confirma la recepción en la cola; la salida física depende del equipo.</p>
             </>
             <div className="text-sm"><label htmlFor={feedId} className="block">Líneas en blanco al final del ticket</label><input id={feedId} aria-describedby={feedId + '-help'} type="number" min={0} max={15} step={1} required className={input + ' mt-1 max-w-28'} value={preference.feed_lines ?? ''} onChange={e => setPreference(p => ({ ...p, feed_lines: e.target.value === '' ? undefined : Number(e.target.value) }))} /><p id={feedId + '-help'} className="mt-1 text-xs text-slate-500">De 0 a 15 líneas después del último texto. Ajusta el espacio para el corte de tu impresora.</p></div>

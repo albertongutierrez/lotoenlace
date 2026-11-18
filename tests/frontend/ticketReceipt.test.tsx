@@ -3,6 +3,18 @@ import { expect, test } from 'vitest';
 import { ticketReceiptHtml } from '../../resources/js/lib/ticketReceipt';
 import { defaultPreference } from '../../resources/js/lib/localPrinter';
 
+test('doble fila imprime parejas sin mezclar sorteos o modalidades y conserva montos largos y el total', () => {
+    const lines = [{draw_id:1,modality:'pale',numbers:'12-25',amount_minor:1000},{draw_id:1,modality:'pale',numbers:'01-12',amount_minor:1000},{draw_id:1,modality:'pale',numbers:'03-04',amount_minor:150},{draw_id:2,modality:'tripleta',numbers:'01-02-03',amount_minor:999999999}];
+    for (const paper_width of [58,80] as const) {
+        const doc = new DOMParser().parseFromString(ticketReceiptHtml({created_at:'2026-11-17T12:00:00Z',net_minor:1000002149,lines},[{id:1,name:'Sorteo completo'},{id:2,name:'Otro sorteo'}],{code:'001'},'DOP',{...defaultPreference,paper_width,wagers_per_row:2}),'text/html');
+        const rows = [...doc.querySelectorAll('table pre')].map(node=>node.textContent);
+        expect(rows).toHaveLength(2); expect(rows[0]).toMatch(/12-25 +RD\$10 \| 01-12 +RD\$10/);expect(rows[1]).toContain('RD$1.50');
+        expect(doc.body.textContent).toContain('RD$9,999,999.99');expect(doc.body.textContent).toContain('01-02-03');
+        expect(doc.querySelector('.total')?.textContent).toBe('Total: RD$10,000,021.49');
+        expect([...doc.querySelectorAll('.draw')].map(node=>node.textContent)).toEqual(['Sorteo completo','Otro sorteo']);
+    }
+});
+
 test('el ticket siempre usa nombres completos aunque ventas o una configuración anterior activen abreviaturas', () => {
     const draws = [{id:1, name:'Sorteo completo A', abbreviation:'SA'}, {id:2, name:'Sorteo completo B'}];
     const ticket = {created_at:'2026-11-16T12:00:00Z', net_minor:200, lines:draws.map(draw=>({draw_id:draw.id, modality:'quiniela', numbers:'10', amount_minor:100}))};

@@ -763,6 +763,7 @@ class LotteryController extends Controller
             'paper_width' => 'required_if:transport,local|integer|in:58,80', 'cut' => 'required_if:transport,local|boolean',
             'feed_lines' => 'sometimes|integer|min:0|max:15',
             'text_size' => 'sometimes|in:small,normal,large',
+            'wagers_per_row' => 'sometimes|integer|in:1,2',
             'document_type' => 'sometimes|in:sale,payout,continuation', 'payment_id' => 'required_if:document_type,payout,continuation|integer|min:1',
         ]);
         $target = ['transport' => $data['transport'] ?? 'browser'];
@@ -772,6 +773,7 @@ class LotteryController extends Controller
             $target['cut'] = (bool) $target['cut'];
             $target['feed_lines'] = (int) ($data['feed_lines'] ?? 2);
             $target['text_size'] = $data['text_size'] ?? 'normal';
+            $target['wagers_per_row'] = (int) ($data['wagers_per_row'] ?? 1);
             try { app(\App\Services\Lottery\PrintAuthorization::class)->publicKey(); }
             catch (\RuntimeException $e) { abort(503, $e->getMessage()); }
         }
@@ -804,7 +806,7 @@ class LotteryController extends Controller
             if ($previous) {
                 abort_unless($previous->user_id === $r->user()->id, 409);
                 abort_unless(($previous->payload['document_type'] ?? 'sale') === $documentType, 409);
-                foreach ($target as $key => $value) abort_unless(($previous->payload[$key] ?? match ($key) { 'transport' => 'browser', 'feed_lines' => 2, 'text_size' => 'normal', 'test_reprint' => false, default => null }) === $value, 409, 'Este intento corresponde a otra impresora o configuración.');
+                foreach ($target as $key => $value) abort_unless(($previous->payload[$key] ?? match ($key) { 'transport' => 'browser', 'feed_lines' => 2, 'text_size' => 'normal', 'wagers_per_row' => 1, 'test_reprint' => false, default => null }) === $value, 409, 'Este intento corresponde a otra impresora o configuración.');
                 abort_if(! $payout && ! $continuation && app(\App\Services\Lottery\PrintPolicy::class)->denial($ticket) !== null, 422, 'El ticket ya no está habilitado para impresión.');
                 return ['audit_id' => $previous->id, 'audit_number'=>$previous->office_number, ...$previous->payload,
                     ...(! $payout && $previous->payload['status'] === 'requested' ? ['ticket_pin' => $ticket->payment_pin] : [])];

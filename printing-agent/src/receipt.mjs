@@ -1,9 +1,9 @@
 import thermal from 'node-thermal-printer';
 import QRCode from 'qrcode';
-import { groupReceiptLines, receiptModes } from './receipt-layout.mjs';
+import { groupReceiptLines, receiptModes, receiptColumns, receiptAmount, receiptText, receiptWagerRows, receiptDoubleRowText } from './receipt-layout.mjs';
 const { ThermalPrinter, PrinterTypes, CharacterSet, BreakLine } = thermal;
-const text = value => String(value ?? '').replace(/[\x00-\x1f\x7f-\x9f]/g, ' ');
-const amount = (minor, currency) => `${currency === 'DOP' ? 'RD$' : text(currency) + ' '}${(minor / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const text = receiptText;
+const amount = receiptAmount;
 export async function renderReceipt(job) {
   const { receipt: r, target } = job;
   const payout = r?.document_type === 'payout';
@@ -15,7 +15,9 @@ export async function renderReceipt(job) {
   if (!Number.isInteger(feedLines) || feedLines < 0 || feedLines > 15) throw new Error('Espacio final inválido.');
   const textSize = target.text_size ?? 'normal';
   if (!['small', 'normal', 'large'].includes(textSize)) throw new Error('Tamaño de texto inválido.');
-  const columns = textSize === 'small' ? (target.paper_width === 58 ? 42 : 64) : (target.paper_width === 58 ? 32 : 48);
+  const wagersPerRow = target.wagers_per_row ?? 1;
+  if (![1, 2].includes(wagersPerRow)) throw new Error('Distribución de jugadas inválida.');
+  const columns = receiptColumns(target.paper_width, textSize);
   const p = new ThermalPrinter({ type: target.profile === 'star' ? PrinterTypes.STAR : PrinterTypes.EPSON, width: columns, characterSet: CharacterSet.PC850_MULTILINGUAL, breakLine: BreakLine.WORD, removeSpecialCharacters: false });
   p.setTextNormal();
   if (textSize === 'small') p.setTypeFontB();
@@ -48,11 +50,12 @@ export async function renderReceipt(job) {
     p.alignLeft();
     for (const draw of group.draws) { p.bold(true); p.println(text(draw.name)); p.bold(false); p.drawLine(); }
     let modality;
-    for (const line of group.lines) {
-      if (modality !== line.modality) {
-        modality = line.modality; p.alignCenter(); p.bold(true); p.println(receiptModes[modality]); p.bold(false); p.alignLeft();
+    for (const row of receiptWagerRows(group.lines, columns, r.currency, wagersPerRow)) {
+      if (modality !== row.modality) {
+        modality = row.modality; p.alignCenter(); p.bold(true); p.println(receiptModes[modality]); p.bold(false); p.alignLeft();
       }
-      p.leftRight(text(line.numbers), amount(line.amount_minor, r.currency));
+      if (row.double) p.println(receiptDoubleRowText(row, columns, r.currency));
+      else p.leftRight(text(row.lines[0].numbers), amount(row.lines[0].amount_minor, r.currency));
     }
   }
   p.drawLine();

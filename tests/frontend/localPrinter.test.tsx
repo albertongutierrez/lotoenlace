@@ -45,7 +45,7 @@ test('una respuesta perdida conserva el mismo intento al reintentar y nunca camb
 });
 
 test('detecta impresoras por combobox y guarda solo la selección de esta banca',async()=>{
- const fetcher=vi.fn().mockResolvedValue({ok:true,json:async()=>({issuer:window.location.origin,capabilities:{text_sizes:['small','normal','large']},device_id:deviceId,printers:[{name:'Térmica USB',driver:'Generic',virtual:false,offline:false},{name:'Microsoft Print to PDF',virtual:true,offline:false}]})});vi.stubGlobal('fetch',fetcher);
+ const fetcher=vi.fn().mockResolvedValue({ok:true,json:async()=>({issuer:window.location.origin,capabilities:{text_sizes:['small','normal','large'],wagers_per_row:[1,2]},device_id:deviceId,printers:[{name:'Térmica USB',driver:'Generic',virtual:false,offline:false},{name:'Microsoft Print to PDF',virtual:true,offline:false}]})});vi.stubGlobal('fetch',fetcher);
  const user=userEvent.setup();const close=vi.fn();render(<PrinterSettingsModal branchId={3} onClose={close}/>);
  expect(screen.queryByText('Diálogo del navegador')).toBeNull();
  expect(screen.getByRole('link',{name:'Descargar paquete completo (.zip)'}).getAttribute('href')).toBe('/lottery/print-agent/download');
@@ -57,6 +57,9 @@ test('detecta impresoras por combobox y guarda solo la selección de esta banca'
  await user.click(screen.getByRole('option',{name:'Térmica USB'}));
  await user.click(screen.getAllByRole('button',{name:'Mostrar opciones'})[3]);
  await user.click(await screen.findByRole('option',{name:'Grande',exact:true}));
+ await user.click(screen.getAllByRole('button',{name:'Mostrar opciones'})[4]);
+ await user.click(await screen.findByRole('option',{name:'Doble fila · dos jugadas por línea'}));
+ expect(screen.getByText('12-25 RD$10 | 01-12 RD$10')).toBeTruthy();
  const feed=screen.getByLabelText('Líneas en blanco al final del ticket');
  await user.clear(feed);await user.type(feed,'0');
  await user.click(screen.getByRole('button',{name:'Guardar impresora'}));
@@ -64,6 +67,7 @@ test('detecta impresoras por combobox y guarda solo la selección de esta banca'
  expect(printerPreference(3).printer).toBe('Térmica USB');expect(printerPreference(4).mode).toBe('local');
  expect(printerPreference(3).feed_lines).toBe(0);expect(printerPreference(4).feed_lines).toBe(2);
  expect(printerPreference(3).text_size).toBe('large');
+ expect(printerPreference(3).wagers_per_row).toBe(2);expect(printerPreference(4).wagers_per_row).toBe(1);
  expect(agentConnection()?.deviceId).toBe(deviceId);
 });
 
@@ -81,6 +85,27 @@ test('un tamaño personalizado exige un agente compatible antes de autorizar otr
  await mountReceipt();
  await screen.findByText('Actualiza el agente de esta PC para imprimir con el tamaño de texto seleccionado.');
  expect(axios.post).not.toHaveBeenCalled();
+});
+
+test('doble fila comprueba la capacidad del agente y firma esa preferencia también en continuaciones', async () => {
+ configure();savePrinterPreference(3,{...printerPreference(3),wagers_per_row:2,paper_width:58});
+ const fetcher=vi.fn().mockResolvedValueOnce({ok:true,json:async()=>({capabilities:{wagers_per_row:[1,2]}})}).mockResolvedValue(success());
+ vi.stubGlobal('fetch',fetcher);
+ render(<IssuedTicketModal ticket={{...ticket,document_type:'continuation',payment_id:99}} draws={[]} branch={{id:3,code:'001'}} currency="DOP" onClose={vi.fn()}/>);
+ fireEvent.load(await screen.findByTitle('Ticket para impresión'));
+ await screen.findByText('Enviado a Térmica USB.');
+ expect(fetcher.mock.calls.map(call=>call[0])).toEqual(['http://127.0.0.1:18745/health','http://127.0.0.1:18745/jobs']);
+ expect(vi.mocked(axios.post).mock.calls[0][1]).toMatchObject({wagers_per_row:2,paper_width:58,document_type:'continuation',payment_id:99});
+});
+
+test('un agente anterior no puede ignorar silenciosamente la doble fila y los valores inválidos vuelven a fila simple', async () => {
+ configure();savePrinterPreference(3,{...printerPreference(3),wagers_per_row:2});
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({capabilities:{text_sizes:['normal']}})}));
+ await mountReceipt();
+ await screen.findByText('Actualiza el agente de esta PC para imprimir en doble fila.');
+ expect(axios.post).not.toHaveBeenCalled();
+ localStorage.setItem('lotoenlace:printer:3',JSON.stringify({...printerPreference(3),wagers_per_row:3}));
+ expect(printerPreference(3).wagers_per_row).toBe(1);
 });
 
 test('cambiar expresamente de impresora genera una autorización nueva para ese destino',async()=>{

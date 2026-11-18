@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { once } from 'node:events';
 import { JobQueue, verifyAuthorization } from '../src/jobs.mjs';
 import { renderReceipt } from '../src/receipt.mjs';
-import { groupReceiptLines } from '../src/receipt-layout.mjs';
+import { groupReceiptLines, receiptColumns, receiptWagerRows, receiptDoubleRowText } from '../src/receipt-layout.mjs';
 import jsQR from 'jsqr';
 import { createAgentServer } from '../src/server.mjs';
 
@@ -16,6 +16,42 @@ const config = { issuer: 'https://loto.example', publicKey: pair.publicKey, toke
 function job(overrides={}) { return { version:1, id:randomUUID(), issuer:config.issuer, issued_at:Math.floor(Date.now()/1000), expires_at:Math.floor(Date.now()/1000)+120, audit_id:1, audit_number:1, target:{device_id:config.deviceId,printer:'Térmica USB',profile:'epson',paper_width:80,cut:true}, receipt:{reference:'T-000001',code:randomUUID(),branch:'001',date:'21/10/2026 11:00 AM',pin:'000042',currency:'DOP',lines:[{draw:'Quiniela LoteDom con nombre completo',numbers:'10',modality:'quiniela',amount_minor:100}],gross_minor:100,discount_minor:0,net_minor:100,received_minor:200,change_minor:100,show_qr:true,footer:'Gracias por su compra',kind:'original',sequence:1}, ...overrides }; }
 function sign(data) { const json=Buffer.from(JSON.stringify(data));return {payload:json.toString('base64'),signature:createSign('RSA-SHA256').update(json).end().sign(pair.privateKey,'base64')}; }
 const listPrinters = async()=>[{name:'Térmica USB',offline:false,virtual:false},{name:'Microsoft Print to PDF',virtual:true}];
+
+test('doble fila conserva cada jugada y centavo, separa modalidades y deja montos largos a ancho completo', async () => {
+ for (const profile of ['epson', 'star']) for (const width of [58, 80]) for (const text_size of ['small', 'normal', 'large']) {
+  const data = job();
+  Object.assign(data.target, {profile, paper_width:width, text_size, wagers_per_row:2});
+  Object.assign(data.receipt, {show_qr:false, lines:[
+   {draw:'Nombre completo del sorteo', modality:'pale', numbers:'12-25', amount_minor:1000},
+   {draw:'Nombre completo del sorteo', modality:'pale', numbers:'01-12', amount_minor:1000},
+   {draw:'Nombre completo del sorteo', modality:'pale', numbers:'03-04', amount_minor:150},
+   {draw:'Nombre completo del sorteo', modality:'tripleta', numbers:'01-02-03', amount_minor:999999999},
+   {draw:'Otro sorteo', modality:'pale', numbers:'05-06', amount_minor:200},
+  ]});
+  const columns = receiptColumns(width, text_size);
+  const groups = groupReceiptLines(data.receipt.lines);
+  const rows = groups.flatMap(group=>receiptWagerRows(group.lines, columns, 'DOP', 2));
+  assert.deepEqual(rows.map(row=>row.lines.length), [2,1,1,1]);
+  assert.equal(rows[2].double, columns === 64);
+  assert.deepEqual(rows.flatMap(row=>row.lines), data.receipt.lines);
+  const bytes = await renderReceipt(data);
+  for (const row of rows.filter(row=>row.double)) {
+   const line = receiptDoubleRowText(row, columns, 'DOP');
+   assert.ok(line.length <= columns); assert.ok(bytes.includes(Buffer.from(line)));
+  }
+  assert.match(receiptDoubleRowText(rows[0], columns, 'DOP'), /12-25 +RD\$10 \| 01-12 +RD\$10/);
+  assert.ok(bytes.includes(Buffer.from('RD$1.50'))); assert.ok(bytes.includes(Buffer.from('RD$9,999,999.99')));
+  assert.ok(bytes.includes(Buffer.from('Nombre completo del sorteo')));
+  const doubleBytes = bytes.length;
+  delete data.target.wagers_per_row;
+  const single = await renderReceipt(data);
+  data.target.wagers_per_row = 1;
+  assert.deepEqual(single, await renderReceipt(data));
+  assert.ok(single.length > doubleBytes);
+ }
+ const data=job();
+ for (const invalid of [0,3,'2',1.5]) { data.target.wagers_per_row=invalid; await assert.rejects(renderReceipt(data), /Distribución/); }
+});
 
 test('selecciona el tamaño de texto en Epson y Star para ambos anchos sin perder el contenido', async () => {
  for (const profile of ['epson', 'star']) for (const width of [58, 80]) for (const size of ['small', 'normal', 'large']) {
@@ -202,8 +238,10 @@ test('la API limita origen, host, clave y tamaño, y responde al permiso de red 
  const q=await queue(t,async()=>({spool_job_id:4}));const server=createAgentServer({config,queue:q,listPrinters});server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(r=>server.close(r)));
  const url=`http://127.0.0.1:${server.address().port}`;
  const headers={Origin:config.issuer,Authorization:`Bearer ${config.token}`};
- assert.equal((await fetch(url+'/health',{headers})).status,200);
- assert.equal((await fetch(url+'/printers',{headers})).status,200);
+ for (const path of ['/health','/printers']) {
+  const response=await fetch(url+path,{headers});assert.equal(response.status,200);
+  assert.deepEqual((await response.json()).capabilities.wagers_per_row,[1,2]);
+ }
  assert.equal((await fetch(url+'/health',{headers:{...headers,Origin:'https://evil.example'}})).status,403);
  assert.equal((await fetch(url+'/health',{headers:{...headers,Authorization:'Bearer wrong'}})).status,401);
  const preflight=await fetch(url+'/jobs',{method:'OPTIONS',headers:{Origin:config.issuer,'Access-Control-Request-Private-Network':'true'}});

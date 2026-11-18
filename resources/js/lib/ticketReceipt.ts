@@ -1,6 +1,6 @@
 import QRCode from 'qrcode';
 import { ticketPaymentMethodName } from './paymentMethods';
-import { groupReceiptLines, receiptModes } from '../../../printing-agent/src/receipt-layout.mjs';
+import { groupReceiptLines, receiptModes, receiptColumns, receiptWagerRows, receiptDoubleRowText } from '../../../printing-agent/src/receipt-layout.mjs';
 import { PrinterPreference } from './localPrinter';
 
 const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!));
@@ -13,12 +13,15 @@ export function ticketReceiptHtml(ticket: any, draws: { id: number; name: string
     const branchName = ticket.print_settings?.branch_name ?? branch.name ?? branch.code;
     const paymentLabel = !payout && !continuation ? `<p>Cobro: ${escapeHtml(ticketPaymentMethodName(ticket))}</p>` : '';
     const name = (id: number, record?: {name: string}) => (record ?? draws.find(draw => draw.id === id))?.name ?? String(id);
+    const columns = receiptColumns(preference.paper_width, preference.text_size ?? 'normal');
     const groups = groupReceiptLines((ticket.lines ?? []).map((line: any) => ({ ...line, draw: typeof line.draw === 'string' ? line.draw : name(line.draw_id, line.draw) + (line.second_draw_id ? ' + ' + name(line.second_draw_id, line.second_draw) : '') })));
     const rows = groups.map(group => {
         let modality = '';
-        return group.draws.map(draw => `<div class="draw">${escapeHtml(draw.name)}</div>`).join('') + '<table><tbody>' + group.lines.map(line => {
-            const heading = modality !== line.modality ? `<tr><th colspan="2">${escapeHtml(receiptModes[line.modality as keyof typeof receiptModes])}</th></tr>` : '';
-            modality = line.modality;
+        return group.draws.map(draw => `<div class="draw">${escapeHtml(draw.name)}</div>`).join('') + '<table><tbody>' + receiptWagerRows(group.lines, columns, ticket.currency ?? currency, preference.wagers_per_row ?? 1).map(row => {
+            const heading = modality !== row.modality ? `<tr><th colspan="2">${escapeHtml(receiptModes[row.modality as keyof typeof receiptModes])}</th></tr>` : '';
+            modality = row.modality;
+            if (row.double) return `${heading}<tr><td colspan="2" style="text-align:left;padding:1px 0"><pre style="margin:0;white-space:pre;font:inherit;font-size:${(preference.paper_width === 58 ? 290 : 420) / columns}px">${escapeHtml(receiptDoubleRowText(row, columns, ticket.currency ?? currency))}</pre></td></tr>`;
+            const line = row.lines[0];
             return `${heading}<tr><td>${escapeHtml(line.numbers)}</td><td>${cash(line.amount_minor)}</td></tr>`;
         }).join('') + '</tbody></table>';
     }).join('');

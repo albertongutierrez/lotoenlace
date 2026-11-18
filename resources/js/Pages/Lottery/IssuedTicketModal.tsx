@@ -37,9 +37,10 @@ export default function IssuedTicketModal({ ticket, draws, branch, currency, onC
         setPrintBusy(true); setStatus(""); setError(''); setUncertain(false); setProgress('Preparando impresión…');
         try {
             const local = localPrintTarget(branch.id);
-            if (local.target.text_size !== 'normal') {
+            if (local.target.text_size !== 'normal' || local.target.wagers_per_row === 2) {
                 const health = await agentRequest('/health', local.connection.token);
-                if (!health.capabilities?.text_sizes?.includes(local.target.text_size)) throw new LocalPrinterError('Actualiza el agente de esta PC para imprimir con el tamaño de texto seleccionado.');
+                if (local.target.text_size !== 'normal' && !health.capabilities?.text_sizes?.includes(local.target.text_size)) throw new LocalPrinterError('Actualiza el agente de esta PC para imprimir con el tamaño de texto seleccionado.');
+                if (local.target.wagers_per_row === 2 && !health.capabilities?.wagers_per_row?.includes(2)) throw new LocalPrinterError('Actualiza el agente de esta PC para imprimir en doble fila.');
             }
             const target = JSON.stringify(local.target);
             if (pendingTarget.current !== target) pendingAttempt.current = null;
