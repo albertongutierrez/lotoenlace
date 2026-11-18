@@ -20,7 +20,7 @@ export function ticketReceiptHtml(ticket: any, draws: { id: number; name: string
         return group.draws.map(draw => `<div class="draw">${escapeHtml(draw.name)}</div>`).join('') + '<table><tbody>' + receiptWagerRows(group.lines, columns, ticket.currency ?? currency, preference.wagers_per_row ?? 1).map(row => {
             const heading = modality !== row.modality ? `<tr><th colspan="2">${escapeHtml(receiptModes[row.modality as keyof typeof receiptModes])}</th></tr>` : '';
             modality = row.modality;
-            if (row.double) return `${heading}<tr><td colspan="2" style="text-align:left;padding:1px 0"><pre style="margin:0;white-space:pre;font:inherit;font-size:${(preference.paper_width === 58 ? 290 : 420) / columns}px">${escapeHtml(receiptDoubleRowText(row, columns, ticket.currency ?? currency))}</pre></td></tr>`;
+            if (preference.wagers_per_row === 2) return `${heading}<tr><td colspan="2" style="text-align:left;padding:1px 0"><pre style="margin:0;white-space:pre;font:inherit;font-size:${(preference.paper_width === 58 ? 290 : 420) / columns}px">${escapeHtml(receiptDoubleRowText(row, columns, ticket.currency ?? currency))}</pre></td></tr>`;
             const line = row.lines[0];
             return `${heading}<tr><td>${escapeHtml(line.numbers)}</td><td>${cash(line.amount_minor)}</td></tr>`;
         }).join('') + '</tbody></table>';

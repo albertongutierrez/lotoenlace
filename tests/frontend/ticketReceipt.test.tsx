@@ -8,7 +8,9 @@ test('doble fila imprime parejas sin mezclar sorteos o modalidades y conserva mo
     for (const paper_width of [58,80] as const) {
         const doc = new DOMParser().parseFromString(ticketReceiptHtml({created_at:'2026-11-17T12:00:00Z',net_minor:1000002149,lines},[{id:1,name:'Sorteo completo'},{id:2,name:'Otro sorteo'}],{code:'001'},'DOP',{...defaultPreference,paper_width,wagers_per_row:2}),'text/html');
         const rows = [...doc.querySelectorAll('table pre')].map(node=>node.textContent);
-        expect(rows).toHaveLength(2); expect(rows[0]).toMatch(/12-25 +RD\$10 \| 01-12 +RD\$10/);expect(rows[1]).toContain('RD$1.50');
+        expect(rows).toHaveLength(3); expect(rows[0]).toMatch(/12-25 +RD\$10 \| 01-12 +RD\$10/);
+        expect(rows[1]?.trim()).toBe('03-04    RD$1.50');expect(rows[1]).not.toContain('|');
+        expect(rows[2]).not.toContain('|');expect(rows[2]?.trim()).toBe('01-02-03    RD$9,999,999.99');
         expect(doc.body.textContent).toContain('RD$9,999,999.99');expect(doc.body.textContent).toContain('01-02-03');
         expect(doc.querySelector('.total')?.textContent).toBe('Total: RD$10,000,021.49');
         expect([...doc.querySelectorAll('.draw')].map(node=>node.textContent)).toEqual(['Sorteo completo','Otro sorteo']);

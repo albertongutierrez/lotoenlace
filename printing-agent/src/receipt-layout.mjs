@@ -63,6 +63,11 @@ export function receiptWagerRows(lines, columns, currency, wagersPerRow = 1) {
 
 /** @param {{lines: ReceiptLine[]}} row */
 export function receiptDoubleRowText(row, columns, currency) {
+  if (row.lines.length === 1) {
+    const line = row.lines[0];
+    const content = `${receiptText(line.numbers)}    ${receiptAmount(line.amount_minor, currency, true)}`;
+    return ' '.repeat(Math.max(0, Math.floor((columns - content.length) / 2))) + content;
+  }
   const cellWidth = Math.floor((columns - 3) / 2);
   const cell = line => {
     if (!line) return ' '.repeat(cellWidth);

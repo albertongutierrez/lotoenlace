@@ -54,7 +54,7 @@ export async function renderReceipt(job) {
       if (modality !== row.modality) {
         modality = row.modality; p.alignCenter(); p.bold(true); p.println(receiptModes[modality]); p.bold(false); p.alignLeft();
       }
-      if (row.double) p.println(receiptDoubleRowText(row, columns, r.currency));
+      if (wagersPerRow === 2) p.println(receiptDoubleRowText(row, columns, r.currency));
       else p.leftRight(text(row.lines[0].numbers), amount(row.lines[0].amount_minor, r.currency));
     }
   }

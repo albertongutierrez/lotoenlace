@@ -35,9 +35,13 @@ test('doble fila conserva cada jugada y centavo, separa modalidades y deja monto
   assert.equal(rows[2].double, columns === 64);
   assert.deepEqual(rows.flatMap(row=>row.lines), data.receipt.lines);
   const bytes = await renderReceipt(data);
-  for (const row of rows.filter(row=>row.double)) {
+  for (const row of rows) {
    const line = receiptDoubleRowText(row, columns, 'DOP');
    assert.ok(line.length <= columns); assert.ok(bytes.includes(Buffer.from(line)));
+   if (row.lines.length === 1) {
+    assert.ok(!line.includes('|'));
+    assert.ok(Math.abs(line.length - line.trimStart().length - (columns - line.length)) <= 1);
+   }
   }
   assert.match(receiptDoubleRowText(rows[0], columns, 'DOP'), /12-25 +RD\$10 \| 01-12 +RD\$10/);
   assert.ok(bytes.includes(Buffer.from('RD$1.50'))); assert.ok(bytes.includes(Buffer.from('RD$9,999,999.99')));
@@ -51,6 +55,22 @@ test('doble fila conserva cada jugada y centavo, separa modalidades y deja monto
  }
  const data=job();
  for (const invalid of [0,3,'2',1.5]) { data.target.wagers_per_row=invalid; await assert.rejects(renderReceipt(data), /Distribución/); }
+});
+
+test('una jugada sola o la última impar queda centrada sin separador en cada modalidad', async () => {
+ for (const profile of ['epson','star']) for (const width of [58,80]) for (const text_size of ['small','normal','large']) for (const count of [1,3]) {
+  const data=job();Object.assign(data.target,{profile,paper_width:width,text_size,wagers_per_row:2});
+  data.receipt.show_qr=false;
+  data.receipt.lines=['quiniela','pale','tripleta','super_pale'].flatMap(modality=>['10','15','18'].slice(0,count).map(n=>({draw:'Sorteo',modality,numbers:modality==='quiniela'?n:modality==='tripleta'?`${n}-20-25`:`${n}-20`,amount_minor:100})));
+  const bytes=await renderReceipt(data);
+  const rows=groupReceiptLines(data.receipt.lines).flatMap(group=>receiptWagerRows(group.lines,receiptColumns(width,text_size),'DOP',2));
+  for (const row of rows.filter(row=>row.lines.length===1)) {
+   const printed=receiptDoubleRowText(row,receiptColumns(width,text_size),'DOP');
+   assert.ok(bytes.includes(Buffer.from(printed+'\n')));assert.ok(!printed.includes('|'));
+   assert.equal(printed.trim(),`${row.lines[0].numbers}    RD$1`);
+  }
+  assert.equal([...bytes].filter(byte=>byte===124).length,count===1?0:4);
+ }
 });
 
 test('selecciona el tamaño de texto en Epson y Star para ambos anchos sin perder el contenido', async () => {
