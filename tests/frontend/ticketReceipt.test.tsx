@@ -3,6 +3,14 @@ import { expect, test } from 'vitest';
 import { ticketReceiptHtml } from '../../resources/js/lib/ticketReceipt';
 import { defaultPreference } from '../../resources/js/lib/localPrinter';
 
+test('la vista del ticket omite el bloque del PIN cuando el servidor lo oculta y centra los títulos', () => {
+    const ticket={show_pin:false,created_at:'2026-11-17T12:00:00Z',net_minor:100,lines:[{draw:'Sorteo completo',draw_id:1,modality:'quiniela',numbers:'10',amount_minor:100}]};
+    const doc=new DOMParser().parseFromString(ticketReceiptHtml(ticket,[],{code:'001'},'DOP',defaultPreference),'text/html');
+    expect(doc.getElementById('ticket-pin')).toBeNull();
+    expect(doc.querySelector('.draw')?.textContent).toBe('Sorteo completo');
+    expect(doc.querySelector('style')?.textContent).toContain('.draw{text-align:center;');
+});
+
 test('doble fila imprime parejas sin mezclar sorteos o modalidades y conserva montos largos y el total', () => {
     const lines = [{draw_id:1,modality:'pale',numbers:'12-25',amount_minor:1000},{draw_id:1,modality:'pale',numbers:'01-12',amount_minor:1000},{draw_id:1,modality:'pale',numbers:'03-04',amount_minor:150},{draw_id:2,modality:'tripleta',numbers:'01-02-03',amount_minor:999999999}];
     for (const paper_width of [58,80] as const) {

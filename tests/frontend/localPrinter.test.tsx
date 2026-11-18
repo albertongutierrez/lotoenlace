@@ -108,6 +108,23 @@ test('un agente anterior no puede ignorar silenciosamente la doble fila y los va
  expect(printerPreference(3).wagers_per_row).toBe(1);
 });
 
+test.each([true,false])('respeta la decisión del consorcio de ocultar el PIN y comprueba el agente: compatible=%s', async compatible => {
+ configure();
+ vi.mocked(axios.post).mockImplementation(async url=>({data:String(url).endsWith('/print')?{show_pin:false,authorization:{payload:'hidden-pin',signature:'signature'}}:{}}));
+ const fetcher=vi.fn().mockResolvedValueOnce({ok:true,json:async()=>({capabilities:{hide_reprint_pin:compatible}})}).mockResolvedValue(success());
+ vi.stubGlobal('fetch',fetcher);
+ const {frame}=await mountReceipt();
+ if(compatible) {
+  await screen.findByText('Enviado a Térmica USB.');
+  expect(fetcher.mock.calls.map(call=>call[0])).toEqual(['http://127.0.0.1:18745/health','http://127.0.0.1:18745/jobs']);
+ } else {
+  await screen.findByText('Actualiza el agente de esta PC para reimprimir tickets sin PIN.');
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(axios.post).mock.calls.some(([url,body])=>String(url).endsWith('/print-status')&&(body as any).status==='failed')).toBe(true);
+ }
+ expect(frame.getAttribute('srcdoc')).not.toContain('id="ticket-pin"');
+});
+
 test('cambiar expresamente de impresora genera una autorización nueva para ese destino',async()=>{
  configure();const fetcher=vi.fn().mockRejectedValueOnce(new TypeError('network')).mockResolvedValue(success());vi.stubGlobal('fetch',fetcher);
  const user=userEvent.setup();await mountReceipt();await screen.findByRole('alert');

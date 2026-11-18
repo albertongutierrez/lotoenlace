@@ -17,6 +17,27 @@ function job(overrides={}) { return { version:1, id:randomUUID(), issuer:config.
 function sign(data) { const json=Buffer.from(JSON.stringify(data));return {payload:json.toString('base64'),signature:createSign('RSA-SHA256').update(json).end().sign(pair.privateKey,'base64')}; }
 const listPrinters = async()=>[{name:'Térmica USB',offline:false,virtual:false},{name:'Microsoft Print to PDF',virtual:true}];
 
+test('oculta el PIN solo en reimpresiones autorizadas y centra el título de cada sorteo', async () => {
+ for (const profile of ['epson','star']) for (const paper_width of [58,80]) for (const document_type of ['sale','continuation']) {
+  const data=job();Object.assign(data.target,{profile,paper_width});
+  Object.assign(data.receipt,{document_type,kind:'reprint',show_pin:false,show_qr:false,payment_reference:'P-000001',paid_minor:100});
+  // Even a supplied PIN must not be printed when the signed reprint says to hide it.
+  const bytes=await renderReceipt(data);
+  assert.ok(!bytes.includes(Buffer.from('000042')));assert.ok(!bytes.includes(Buffer.from('PIN de cobro:')));
+  const centered=profile==='epson'?[0x1b,0x61,1]:[0x1b,0x1d,0x61,1];
+  const left=profile==='epson'?[0x1b,0x61,0]:[0x1b,0x1d,0x61,0];
+  const title=bytes.indexOf(Buffer.from('Quiniela LoteDom'));
+  assert.ok(title>=0);assert.ok(bytes.lastIndexOf(Buffer.from(centered),title)>bytes.lastIndexOf(Buffer.from(left),title));
+  delete data.receipt.pin;
+  await renderReceipt(data);
+  data.receipt.kind='original';await assert.rejects(renderReceipt(data),/Comprobante inválido/);
+  data.receipt.pin='000042';
+  const original=await renderReceipt(data);assert.ok(original.includes(Buffer.from('PIN de cobro: 000042')));
+  data.receipt.kind='reprint';delete data.receipt.show_pin;
+  assert.ok((await renderReceipt(data)).includes(Buffer.from('PIN de cobro: 000042')));
+ }
+});
+
 test('doble fila conserva cada jugada y centavo, separa modalidades y deja montos largos a ancho completo', async () => {
  for (const profile of ['epson', 'star']) for (const width of [58, 80]) for (const text_size of ['small', 'normal', 'large']) {
   const data = job();
@@ -260,7 +281,8 @@ test('la API limita origen, host, clave y tamaño, y responde al permiso de red 
  const headers={Origin:config.issuer,Authorization:`Bearer ${config.token}`};
  for (const path of ['/health','/printers']) {
   const response=await fetch(url+path,{headers});assert.equal(response.status,200);
-  assert.deepEqual((await response.json()).capabilities.wagers_per_row,[1,2]);
+  const capabilities=(await response.json()).capabilities;
+  assert.deepEqual(capabilities.wagers_per_row,[1,2]);assert.equal(capabilities.hide_reprint_pin,true);
  }
  assert.equal((await fetch(url+'/health',{headers:{...headers,Origin:'https://evil.example'}})).status,403);
  assert.equal((await fetch(url+'/health',{headers:{...headers,Authorization:'Bearer wrong'}})).status,401);

@@ -231,7 +231,7 @@ class LotteryController extends Controller
 
         $data = $r->validate(['scope' => ['required', Rule::in(['office', 'branch'])], 'currency' => ['required', Rule::in(['DOP', 'USD', 'EUR', 'HTG'])],
 
-            'settings' => 'present|array:payment_methods,payment_method_labels,payment_reference_required,reconciliation_mode,daily_limit_minor,consortium_limit_minor,cancel_minutes,reprint_minutes,show_qr,abbreviate_draw_names,copy_consortium_tickets,ticket_copy_mode,discount_enabled,discount_every_minor,discount_amount_minor,footer,draw_ids,general_rules,rules,pairs,super_pale',
+            'settings' => 'present|array:payment_methods,payment_method_labels,payment_reference_required,reconciliation_mode,daily_limit_minor,consortium_limit_minor,cancel_minutes,reprint_minutes,show_qr,show_pin_on_reprint,abbreviate_draw_names,copy_consortium_tickets,ticket_copy_mode,discount_enabled,discount_every_minor,discount_amount_minor,footer,draw_ids,general_rules,rules,pairs,super_pale',
 
             'settings.payment_methods' => 'nullable|array|list|min:1|max:100',
             'settings.payment_methods.*' => ['required', 'string', 'regex:/^(cash|transfer|card|deposit|custom_[a-f0-9]{12})$/D', 'distinct'],
@@ -246,6 +246,7 @@ class LotteryController extends Controller
             'settings.cancel_minutes' => 'nullable|integer|between:0,1440', 'settings.reprint_minutes' => 'nullable|integer|between:0,1440',
 
             'settings.show_qr' => 'nullable|boolean', 'settings.discount_enabled' => 'nullable|boolean',
+            'settings.show_pin_on_reprint' => ['nullable', 'boolean', Rule::prohibitedIf($r->input('scope') !== 'office')],
             'settings.copy_consortium_tickets' => 'nullable|boolean',
             'settings.ticket_copy_mode' => 'nullable|in:original,selected',
             'settings.abbreviate_draw_names' => 'nullable|boolean',
@@ -810,13 +811,14 @@ class LotteryController extends Controller
                 foreach ($target as $key => $value) abort_unless(($previous->payload[$key] ?? match ($key) { 'transport' => 'browser', 'feed_lines' => 2, 'text_size' => 'normal', 'wagers_per_row' => 1, 'test_reprint' => false, default => null }) === $value, 409, 'Este intento corresponde a otra impresora o configuración.');
                 abort_if(! $payout && ! $continuation && app(\App\Services\Lottery\PrintPolicy::class)->denial($ticket) !== null, 422, 'El ticket ya no está habilitado para impresión.');
                 return ['audit_id' => $previous->id, 'audit_number'=>$previous->office_number, ...$previous->payload,
-                    ...(! $payout && $previous->payload['status'] === 'requested' ? ['ticket_pin' => $ticket->payment_pin] : [])];
+                    ...(! $payout && ($previous->payload['show_pin'] ?? true) && $previous->payload['status'] === 'requested' ? ['ticket_pin' => $ticket->payment_pin] : [])];
             }
             $sequence = (clone $events)->where('action', 'ticket.print_requested')->count() + 1;
             $reason = ($payout || $continuation) ? null : app(\App\Services\Lottery\PrintPolicy::class)->denial($ticket);
             $payload = ['ticket' => $code, 'branch_id' => $bank->id, 'branch_code' => $bank->code,
                 'attempt_key' => $data['attempt_key'], 'trigger' => $data['trigger'],
                 'sequence' => $reason ? null : $sequence, 'kind' => $sequence === 1 ? 'original' : 'reprint',
+                'show_pin' => ! $payout && ($sequence === 1 || (bool) app(Configuration::class)->effective($bank)['show_pin_on_reprint']),
                 'ip' => $r->ip(), 'user_agent' => substr((string) $r->userAgent(), 0, 500),
                 'reason' => $reason, 'status' => $reason ? 'denied' : 'requested', 'ticket_status' => $ticket->status,
                 'net_minor' => ($payout || $continuation) ? $documentReceipt['net_minor'] : $ticket->net_minor, 'currency' => $ticket->currency, ...$target];
@@ -824,7 +826,7 @@ class LotteryController extends Controller
                 'action' => $reason ? 'ticket.print_denied' : 'ticket.print_requested', 'payload' => $payload]);
             // Return the PIN only for an authorized receipt, never persist it in the audit.
             return ['audit_id' => $event->id, 'audit_number'=>$event->office_number, ...$payload,
-                ...(! $payout && $reason === null ? ['ticket_pin' => $ticket->payment_pin] : [])];
+                ...($payload['show_pin'] && $reason === null ? ['ticket_pin' => $ticket->payment_pin] : [])];
         });
         if ($target['transport'] === 'local' && $result['status'] === 'requested') {
             $ticket = Ticket::where('office_id', $bank->office_id)->where('branch_office_id', $bank->id)->withReference($code)->firstOrFail();

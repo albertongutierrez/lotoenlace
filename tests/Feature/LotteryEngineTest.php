@@ -1753,7 +1753,7 @@ class LotteryEngineTest extends TestCase
         try {
             $this->a->update(['abbreviation' => 'ABR A']);
             $this->b->update(['abbreviation' => 'ABR B']);
-            $this->office->update(['lottery_settings' => [...$this->office->lottery_settings, 'abbreviate_draw_names' => true]]);
+            $this->office->update(['lottery_settings' => [...$this->office->lottery_settings, 'abbreviate_draw_names' => true, 'show_pin_on_reprint' => false]]);
             $ticket = $this->sell([$this->line('10'), [...$this->line('5'), 'numbers' => '11'], [...$this->line('4'), 'draw_id' => $this->b->id, 'numbers' => '20'], $this->line('3', true)]);
             $ticket->update(['payment_pin' => '000042', 'created_at' => now()->subDays(2), 'business_date' => now()->subDays(2)->toDateString()]);
             $lines = $ticket->lines()->orderBy('id')->get();
@@ -1787,6 +1787,9 @@ class LotteryEngineTest extends TestCase
             $this->assertSame(['B', 'A + B'], array_column($receipt['lines'], 'draw'));
             $this->postJson($printUrl, $request)->assertOk()->assertJsonPath('audit_id', $printed->json('audit_id'));
             $this->assertSame($firstPin, $ticket->fresh()->payment_pin);
+            $hiddenCopy = $this->postJson($printUrl, [...$request, 'attempt_key' => (string) Str::uuid()])->assertOk()->assertJsonPath('show_pin', false)->assertJsonMissingPath('ticket_pin');
+            $hiddenReceipt = json_decode(base64_decode($hiddenCopy->json('authorization.payload')), true)['receipt'];
+            $this->assertFalse($hiddenReceipt['show_pin']); $this->assertArrayNotHasKey('pin', $hiddenReceipt);
             $this->getJson('/lottery/tickets/'.$ticket->code.'?reprint=1')->assertOk()->assertJsonPath('document_type', 'continuation')->assertJsonCount(2, 'lines')->assertJsonMissingPath('pin');
             $normalPrint = $request; unset($normalPrint['document_type'], $normalPrint['payment_id']);
             $this->postJson($printUrl, [...$normalPrint, 'attempt_key' => (string) Str::uuid()])->assertOk()->assertJsonPath('document_type', 'continuation');
@@ -1904,6 +1907,46 @@ class LotteryEngineTest extends TestCase
         $this->assertStringNotContainsString('000042', \App\Models\LotteryAudit::all()->toJson());
         $this->travel(20)->minutes();
         $this->postJson($url, ['attempt_key' => (string) Str::uuid(), 'trigger' => 'manual'])->assertUnprocessable()->assertJsonMissingPath('ticket_pin');
+    }
+
+    public function test_consortium_can_hide_reprint_pins_without_hiding_originals_or_changing_payment_validation(): void
+    {
+        $directory = storage_path('framework/testing/reprint-pin-'.Str::uuid());
+        config(['printing.private_key_path' => $directory.'/private.pem']);
+        $this->artisan('lottery:print-agent-key')->assertExitCode(0);
+        try {
+            $ticket = $this->sell();
+            $ticket->update(['payment_pin' => '000042']);
+            $this->assertTrue(app(Configuration::class)->effective($this->branch)['show_pin_on_reprint']);
+            $settings = [...$this->office->lottery_settings, 'show_pin_on_reprint' => false];
+            $this->actingAs($this->seller)->postJson('/lottery/settings', ['scope' => 'office', 'office_id' => $this->office->id, 'currency' => 'DOP', 'settings' => $settings])->assertRedirect();
+            $this->assertFalse($this->office->fresh()->lottery_settings['show_pin_on_reprint']);
+            $this->branch->update(['lottery_settings' => ['show_pin_on_reprint' => true]]);
+            $this->assertFalse(app(Configuration::class)->effective($this->branch->fresh())['show_pin_on_reprint']);
+            $request = ['attempt_key' => (string) Str::uuid(), 'trigger' => 'automatic', 'transport' => 'local',
+                'device_id' => (string) Str::uuid(), 'printer' => 'Térmica USB', 'profile' => 'epson', 'paper_width' => 58, 'cut' => true];
+            $url = '/lottery/tickets/'.$ticket->code.'/print';
+            $original = $this->postJson($url, $request)->assertOk()->assertJsonPath('show_pin', true)->assertJsonPath('ticket_pin', '000042');
+            $this->assertSame('000042', json_decode(base64_decode($original->json('authorization.payload')), true)['receipt']['pin']);
+            $copyRequest = [...$request, 'attempt_key' => (string) Str::uuid(), 'trigger' => 'manual', 'show_pin' => true];
+            $hidden = $this->postJson($url, $copyRequest)->assertOk()->assertJsonPath('kind', 'reprint')->assertJsonPath('show_pin', false)->assertJsonMissingPath('ticket_pin');
+            $receipt = json_decode(base64_decode($hidden->json('authorization.payload')), true)['receipt'];
+            $this->assertFalse($receipt['show_pin']); $this->assertArrayNotHasKey('pin', $receipt);
+            $this->postJson($url, $copyRequest)->assertOk()->assertJsonPath('audit_id', $hidden->json('audit_id'))->assertJsonMissingPath('ticket_pin');
+            $settings['show_pin_on_reprint'] = true;
+            $this->postJson('/lottery/settings', ['scope' => 'office', 'currency' => 'DOP', 'settings' => $settings])->assertRedirect();
+            $this->postJson($url, $copyRequest)->assertOk()->assertJsonPath('show_pin', false)->assertJsonMissingPath('ticket_pin');
+            $this->postJson($url, [...$request, 'attempt_key' => (string) Str::uuid()])->assertOk()->assertJsonPath('show_pin', true)->assertJsonPath('ticket_pin', '000042');
+            $this->assertSame('000042', $ticket->fresh()->payment_pin);
+            $this->assertStringNotContainsString('000042', \App\Models\LotteryAudit::all()->toJson());
+            $this->postJson('/lottery/settings', ['scope' => 'branch', 'branch_id' => $this->branch->id, 'currency' => 'DOP', 'settings' => ['show_pin_on_reprint' => false]])->assertUnprocessable()->assertJsonValidationErrors('settings.show_pin_on_reprint');
+            $this->postJson('/lottery/settings', ['scope' => 'office', 'currency' => 'DOP', 'settings' => ['show_pin_on_reprint' => 'invalid']])->assertUnprocessable()->assertJsonValidationErrors('settings.show_pin_on_reprint');
+            $other = Office::create(['name' => 'Otro consorcio', 'currency' => 'DOP', 'is_active' => true]);
+            $this->postJson('/lottery/settings', ['scope' => 'office', 'office_id' => $other->id, 'currency' => 'DOP', 'settings' => ['show_pin_on_reprint' => false]])->assertForbidden();
+            $ticket->lines()->update(['prize_minor' => 7500]);
+            $this->postJson('/lottery/sales/tickets/'.$ticket->code.'/pay', ['pin' => '111111'])->assertUnprocessable()->assertJsonValidationErrors('pin');
+            $this->assertNull($ticket->lines()->first()->paid_at);
+        } finally { \Illuminate\Support\Facades\File::deleteDirectory($directory); }
     }
 
     public function test_sales_payment_requires_the_matching_pin_and_does_not_move_cash_when_rejected(): void

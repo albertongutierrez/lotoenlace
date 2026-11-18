@@ -8,7 +8,8 @@ export async function renderReceipt(job) {
   const { receipt: r, target } = job;
   const payout = r?.document_type === 'payout';
   const continuation = r?.document_type === 'continuation';
-  if (!r || !Array.isArray(r.lines) || !r.lines.length || r.lines.length > 500 || (!payout && !/^[0-9]{6}$/.test(r.pin))) throw new Error('Comprobante inválido.');
+  const showPin = !payout && !(r?.kind === 'reprint' && r.show_pin === false);
+  if (!r || !Array.isArray(r.lines) || !r.lines.length || r.lines.length > 500 || (showPin && !/^[0-9]{6}$/.test(r.pin))) throw new Error('Comprobante inválido.');
   if (payout && (!r.payment_reference || !Number.isSafeInteger(r.net_minor) || r.net_minor <= 0 || r.net_minor !== r.lines.reduce((sum, line) => sum + line.amount_minor, 0))) throw new Error('Pago inválido.');
   if (![58, 80].includes(target.paper_width) || !['epson', 'star'].includes(target.profile)) throw new Error('Perfil de impresión inválido.');
   const feedLines = target.feed_lines ?? 2;
@@ -38,7 +39,7 @@ export async function renderReceipt(job) {
   if (payout) { p.println('COMPROBANTE DE PAGO'); p.println(`Pago: ${text(r.payment_reference)}`); }
   if (continuation) { p.println('TICKET DE CONTINUACION'); p.println('SORTEOS PENDIENTES'); p.println(`Pago: ${text(r.payment_reference)}`); }
   p.println(`Ticket: ${text(r.reference)}`);
-  if (!payout) p.println(`PIN de cobro: ${r.pin}`);
+  if (showPin) p.println(`PIN de cobro: ${r.pin}`);
   p.bold(false);
   if (payout) { p.println(`Pagado por: ${text(r.paid_by)}`); p.println('PREMIOS PAGADOS'); }
   p.newLine();
@@ -48,7 +49,7 @@ export async function renderReceipt(job) {
   }
   for (const group of groupReceiptLines(r.lines)) {
     p.alignLeft();
-    for (const draw of group.draws) { p.bold(true); p.println(text(draw.name)); p.bold(false); p.drawLine(); }
+    for (const draw of group.draws) { p.alignCenter(); p.bold(true); p.println(text(draw.name)); p.bold(false); p.alignLeft(); p.drawLine(); }
     let modality;
     for (const row of receiptWagerRows(group.lines, columns, r.currency, wagersPerRow)) {
       if (modality !== row.modality) {

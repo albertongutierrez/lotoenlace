@@ -11,7 +11,7 @@ class Configuration
 {
     public const PAYMENT_METHODS = ['cash'=>'Efectivo', 'transfer'=>'Transferencia', 'card'=>'Tarjeta', 'deposit'=>'Depósito'];
     public const DEFAULTS = ['payment_methods' => ['cash'], 'payment_method_labels' => [], 'payment_reference_required' => [], 'reconciliation_mode' => 'cash', 'daily_limit_minor' => null, 'consortium_limit_minor' => null, 'cancel_minutes' => 5,
-        'reprint_minutes' => 15, 'show_qr' => false, 'abbreviate_draw_names' => false, 'copy_consortium_tickets' => false, 'ticket_copy_mode' => 'original', 'discount_enabled' => false, 'discount_every_minor' => 1000,
+        'reprint_minutes' => 15, 'show_qr' => false, 'show_pin_on_reprint' => true, 'abbreviate_draw_names' => false, 'copy_consortium_tickets' => false, 'ticket_copy_mode' => 'original', 'discount_enabled' => false, 'discount_every_minor' => 1000,
         'discount_amount_minor' => 100, 'footer' => '', 'draw_ids' => [], 'general_rules' => [], 'rules' => [], 'pairs' => [], 'super_pale' => []];
 
     public function effective(BranchOffice $branch): array
@@ -24,6 +24,7 @@ class Configuration
             ? ($overrides['payment_reference_required'] ?? [])
             : ($parent['payment_reference_required'] ?? []);
         $result['consortium_limit_minor'] = $parent['consortium_limit_minor'];
+        $result['show_pin_on_reprint'] = (bool) $parent['show_pin_on_reprint'];
         $result['draw_ids'] = array_values(array_intersect($parent['draw_ids'], $result['draw_ids']));
         // Override individual rule fields, rather than copying an entire parent's tariff table.
         $result['rules'] = $parent['rules'];

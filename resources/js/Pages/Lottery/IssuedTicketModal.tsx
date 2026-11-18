@@ -29,16 +29,18 @@ export default function IssuedTicketModal({ ticket, draws, branch, currency, onC
     const [confirmCopy, setConfirmCopy] = useState(false);
     const [uncertain, setUncertain] = useState(false);
     const [configure, setConfigure] = useState(false);
+    const [showPin, setShowPin] = useState(true);
     const [preference, setPreference] = useState(() => printerPreference(branch.id));
-    const receipt = useMemo(() => ticketReceiptHtml(ticket, draws, branch, currency, preference), [ticket, draws, branch.code, branch.name, branch.office?.name, currency, preference]);
+    const receipt = useMemo(() => ticketReceiptHtml({...ticket, show_pin: showPin}, draws, branch, currency, preference), [ticket, draws, branch.code, branch.name, branch.office?.name, currency, preference, showPin]);
     const print = async (trigger: "automatic" | "manual" = "manual") => {
         if (printing.current || sent.current) return;
         printing.current = true;
         setPrintBusy(true); setStatus(""); setError(''); setUncertain(false); setProgress('Preparando impresión…');
         try {
             const local = localPrintTarget(branch.id);
+            let health;
             if (local.target.text_size !== 'normal' || local.target.wagers_per_row === 2) {
-                const health = await agentRequest('/health', local.connection.token);
+                health = await agentRequest('/health', local.connection.token);
                 if (local.target.text_size !== 'normal' && !health.capabilities?.text_sizes?.includes(local.target.text_size)) throw new LocalPrinterError('Actualiza el agente de esta PC para imprimir con el tamaño de texto seleccionado.');
                 if (local.target.wagers_per_row === 2 && !health.capabilities?.wagers_per_row?.includes(2)) throw new LocalPrinterError('Actualiza el agente de esta PC para imprimir en doble fila.');
             }
@@ -47,10 +49,15 @@ export default function IssuedTicketModal({ ticket, draws, branch, currency, onC
             pendingTarget.current = target;
             pendingAttempt.current ??= requestId();
             const { data } = await axios.post(`/lottery/tickets/${encodeURIComponent(ticket.code)}/print`, { branch_id: branch.id, attempt_key: pendingAttempt.current, trigger, ...local.target, ...((payout || continuation) ? {document_type: ticket.document_type, payment_id: ticket.payment_id} : {}) });
+            setShowPin(data.show_pin !== false);
             setProgress(`Enviando a ${local.preference.printer}…`);
             const attemptKey = pendingAttempt.current;
             let result;
             try {
+                if (!payout && data.show_pin === false) {
+                    health ??= await agentRequest('/health', local.connection.token);
+                    if (!health.capabilities?.hide_reprint_pin) throw new LocalPrinterError('Actualiza el agente de esta PC para reimprimir tickets sin PIN.');
+                }
                 result = await agentRequest('/jobs', local.connection.token, { authorization: data.authorization });
             } catch (e) {
                 const unknown = e instanceof LocalPrinterError && e.state === 'unknown';

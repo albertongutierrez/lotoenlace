@@ -37,7 +37,9 @@ class PrintAuthorization
             'audit_id' => $event->id, 'audit_number' => $event->office_number,
             'target' => array_intersect_key($p, array_flip(['device_id', 'printer', 'profile', 'paper_width', 'cut', 'feed_lines', 'text_size', 'wagers_per_row'])),
             'receipt' => [
-                'reference' => $ticket->reference, 'code' => $ticket->code, 'pin' => $ticket->payment_pin,
+                'reference' => $ticket->reference, 'code' => $ticket->code,
+                'show_pin' => $p['show_pin'] ?? true,
+                ...(($p['show_pin'] ?? true) ? ['pin' => $ticket->payment_pin] : []),
                 'test_reprint' => (bool) ($p['test_reprint'] ?? false), 'status' => $ticket->status,
                 'branch' => $bank->code, 'currency' => $ticket->currency,
                 'company_name' => $bank->office->name, 'branch_name' => $bank->name ?: $bank->code,
@@ -79,7 +81,7 @@ class PrintAuthorization
             'issued_at' => now()->timestamp, 'expires_at' => now()->addMinutes(2)->timestamp,
             'audit_id' => $event->id, 'audit_number' => $event->office_number,
             'target' => array_intersect_key($p, array_flip(['device_id', 'printer', 'profile', 'paper_width', 'cut', 'feed_lines', 'text_size', 'wagers_per_row'])),
-            'receipt' => [...app(ContinuationTicket::class)->make($ticket, $payment, true), 'test_reprint' => (bool) ($p['test_reprint'] ?? false), 'kind' => $p['kind'], 'sequence' => $p['sequence']],
+            'receipt' => [...app(ContinuationTicket::class)->make($ticket, $payment, $p['show_pin'] ?? true), 'show_pin' => $p['show_pin'] ?? true, 'test_reprint' => (bool) ($p['test_reprint'] ?? false), 'kind' => $p['kind'], 'sequence' => $p['sequence']],
         ]);
     }
 
