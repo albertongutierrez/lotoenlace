@@ -61,6 +61,7 @@ class HandleInertiaRequests extends Middleware
 
             'id' => $branch->id, 'id_hash' => $branch->id_hash, 'name' => $branch->name, 'code' => $branch->code,
             'reconciliation_mode' => app(\App\Services\Lottery\Configuration::class)->reconciliationMode($branch),
+            ...app(\App\Services\Lottery\DateTimePreferences::class)->forBranch($branch),
 
             'office_id_hash' => $office->id_hash, 'office_name' => $office->name, 'office_slogan' => $office->slogan,
 

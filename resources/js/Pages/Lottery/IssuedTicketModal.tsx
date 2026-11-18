@@ -1,3 +1,4 @@
+import { formatTime } from '@/lib/dateTime';
 import axios from "axios";
 import PrinterSettingsModal from "./PrinterSettingsModal";
 import { agentRequest, LocalPrinterError, localPrintTarget, printerPreference } from "@/lib/localPrinter";
@@ -67,7 +68,7 @@ export default function IssuedTicketModal({ ticket, draws, branch, currency, onC
             }
             if (result.status !== 'submitted') throw new LocalPrinterError('No se pudo confirmar el envío a la impresora.', 'unknown');
             sent.current = true;
-            const confirmation: PrintConfirmation = { mode: 'local', at: new Date().toLocaleTimeString('es-DO', { timeZone: 'America/Santo_Domingo' }), spoolId: result.spool_job_id };
+            const confirmation: PrintConfirmation = { mode: 'local', at: formatTime(new Date(), {second:'2-digit'}), spoolId: result.spool_job_id };
             setSentInfo(confirmation);
             setStatus(`Enviado a ${local.preference.printer}.`);
             pendingAttempt.current = null;

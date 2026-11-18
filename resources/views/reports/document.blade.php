@@ -27,7 +27,7 @@ p { margin:5px 0; }.muted { color:#647783; }.small { font-size:8px; }.tiny { fon
 @php
  $amount=fn($v)=>$v===null?'—':number_format($v/100,2,'.',',');
  $cash=fn($v)=>$currency.' '.$amount($v);
- $date=fn($v)=>$v?\Carbon\CarbonImmutable::parse($v)->setTimezone('America/Santo_Domingo')->format('d/m/Y H:i'):'—';
+ $date=fn($v)=>$v?app(\App\Services\Lottery\DateTimePreferences::class)->format($v,$date_time):'—';
  $day=fn($v)=>\Carbon\CarbonImmutable::parse($v)->format('d/m/Y');
  $modes=['quiniela'=>'Quiniela','pale'=>'Palé','tripleta'=>'Tripleta','super_pale'=>'Súper palé'];
  $formatCell=function($value,$column) use($amount,$date,$modes) {
@@ -46,7 +46,7 @@ p { margin:5px 0; }.muted { color:#647783; }.small { font-size:8px; }.tiny { fon
 <div class="small muted">{{ implode(' · ',array_filter([$company['tax_id']?'RNC '.$company['tax_id']:null,$company['phone'],$company['email']])) }}</div>
 @if($company['address'])<div class="small muted">{{ $company['address'] }}</div>@endif
 @else<div class="small muted">{{ $office['name'] }}</div>@endif
-</td><td class="header-meta"><strong>{{ $day($from) }} — {{ $day($to) }}</strong><br>Emitido {{ $generated }}<br>{{ $printedBy }}<br>Moneda {{ $currency }} · Hora RD</td></tr></table>
+</td><td class="header-meta"><strong>{{ $day($from) }} — {{ $day($to) }}</strong><br>Emitido {{ $generated }}<br>{{ $printedBy }}<br>Moneda {{ $currency }} · {{ $date_time['display_timezone'] }}<br>Período operativo: RD</td></tr></table>
 <div class="context">@foreach($filterLabels as $label=>$value)<span><strong>{{ $label }}:</strong> {{ $value }}</span>@endforeach<span>{{ $rows->count() }} registros</span></div>
 @if($report==='cash')
  @include('reports.cash-detail')

@@ -33,6 +33,8 @@ class ReportController extends Controller
    $bankIds=$bankIds->intersect($reportBanks->pluck('id'))->values();
   }
   $today=CarbonImmutable::now('America/Santo_Domingo')->startOfDay();
+  $dateTime=app(\App\Services\Lottery\DateTimePreferences::class)->forBranch($active);
+  $formatDate=fn($value)=>app(\App\Services\Lottery\DateTimePreferences::class)->format($value,$dateTime);
   [$from,$to]=match($r->input('period','today')) {
    'yesterday'=>[$today->subDay(),$today->subDay()], 'month'=>[$today->startOfMonth(),$today->endOfMonth()],
    'last_month'=>[$today->subMonthNoOverflow()->startOfMonth(),$today->subMonthNoOverflow()->endOfMonth()],
@@ -55,9 +57,9 @@ class ReportController extends Controller
    $period=app(\App\Services\Lottery\PeriodReconciliation::class)->build($active->office_id,$banks->whereIn('id',$bankIds),$start,$end,(string)($r->input('view')?:'summary'),trim((string)$r->input('search','')),(string)($r->input('operation')?:'all'));
    $rows=$period['rows']; $totals=$period['totals'];
    $columns=$r->input('view','summary')==='detail'
-    ? $col(['date'=>['Fecha RD','date'],'bank'=>'Banca','ticket'=>'Ticket','type'=>'Operación','payment_method'=>'Medio','user'=>'Usuario','amount'=>['Monto neto','money'],'commission'=>['Comisión','money']])
+    ? $col(['date'=>['Fecha / hora','date'],'bank'=>'Banca','ticket'=>'Ticket','type'=>'Operación','payment_method'=>'Medio','user'=>'Usuario','amount'=>['Monto neto','money'],'commission'=>['Comisión','money']])
     : $col(['bank'=>'Banca','tickets'=>'Tickets vendidos','sales'=>['Ventas cobradas','money'],'refunds'=>['Anulaciones','money'],'paid'=>['Premios pagados','money'],'balance'=>['Neto de operaciones','money'],'commission'=>['Comisiones netas','money']]);
-   $note='Cuadre por fecha real de cada venta, anulación y pago de premio, en hora RD. Incluye operaciones sin caja y el historial de operaciones de estas bancas. Neto de operaciones = ventas cobradas − anulaciones − premios pagados. Las comisiones se muestran aparte y no se descuentan automáticamente. No representa efectivo contado ni saldo de una caja; no incluye fondos iniciales ni entradas o salidas manuales de cajas.';
+   $note='Cuadre por fecha real de cada venta, anulación y pago de premio, con filtros de fecha en RD. Las horas se muestran según la configuración de visualización. Incluye operaciones sin caja y el historial de operaciones de estas bancas. Neto de operaciones = ventas cobradas − anulaciones − premios pagados. Las comisiones se muestran aparte y no se descuentan automáticamente. No representa efectivo contado ni saldo de una caja; no incluye fondos iniciales ni entradas o salidas manuales de cajas.';
   } elseif ($kind==='cash') {
    $sessionQuery=CashSession::with(['opener:id,name','closer:id,name'])->where('office_id',$active->office_id)->whereIn('branch_office_id',$bankIds);
    if($r->filled('cash_session_id')) {
@@ -71,7 +73,7 @@ class ReportController extends Controller
     return ['id'=>$s->id,'bank'=>$bankNames[$s->branch_office_id],'opened'=>$s->created_at,'closed'=>$s->closed_at,'user'=>$s->opener?->name,'closer'=>$s->closer?->name,
      'state'=>$s->status==='closed'?'Cerrada':'Abierta','opening'=>$visible?$s->opening_minor:null,'expected'=>$visible?$s->balance_minor:null,'counted'=>$visible?$s->counted_minor:null,'difference'=>$visible?$s->difference_minor:null,'note'=>$s->closing_note];
    });
-   $columns=$col(['id'=>'Caja','bank'=>'Banca','opened'=>['Apertura RD','date'],'closed'=>['Cierre RD','date'],'user'=>'Abrió','closer'=>'Cerró','state'=>'Estado','opening'=>['Fondo inicial','money'],'expected'=>['Esperado','money'],'counted'=>['Contado','money'],'difference'=>['Diferencia','money'],'note'=>'Observación']);
+   $columns=$col(['id'=>'Caja','bank'=>'Banca','opened'=>['Apertura','date'],'closed'=>['Cierre','date'],'user'=>'Abrió','closer'=>'Cerró','state'=>'Estado','opening'=>['Fondo inicial','money'],'expected'=>['Esperado','money'],'counted'=>['Contado','money'],'difference'=>['Diferencia','money'],'note'=>'Observación']);
    $note='Filtrado por fecha de apertura. Los saldos de cajas abiertas están ocultos sin el permiso correspondiente.';
   } elseif ($kind==='results') {
    $enabled=$banks->whereIn('id',$bankIds)->flatMap(fn($b)=>app(Configuration::class)->effective($b)['draw_ids'])->unique();
@@ -91,7 +93,7 @@ class ReportController extends Controller
      'printer'=>$p['printer']??'Navegador','delivery'=>['submitted'=>'En cola de Windows','failed'=>'No enviado','unknown'=>'Por verificar'][$p['delivery']['status']??'']??'Sin confirmación',
      'risk'=>$risk,'review'=>$risk?($paidBefore?'Reimpresión después de pago':'Reimpresión antes de pago'):'—','ip'=>$p['ip']??'','reason'=>$p['reason']??''];
    })->filter(fn($x)=>!$r->boolean('risk')||$x['risk']);
-   $columns=$col(['id'=>'Control','date'=>['Fecha RD','date'],'ticket'=>'Ticket','bank'=>'Banca','user'=>'Usuario','document'=>'Documento','state'=>'Solicitud','copy'=>'Copia','printer'=>'Destino','delivery'=>'Envío','paid'=>['Premios pagados','money'],'review'=>'Revisión','ip'=>'IP','reason'=>'Motivo']);
+   $columns=$col(['id'=>'Control','date'=>['Fecha / hora','date'],'ticket'=>'Ticket','bank'=>'Banca','user'=>'Usuario','document'=>'Documento','state'=>'Solicitud','copy'=>'Copia','printer'=>'Destino','delivery'=>'Envío','paid'=>['Premios pagados','money'],'review'=>'Revisión','ip'=>'IP','reason'=>'Motivo']);
    $note='Fechas de solicitudes de impresión. Se destacan reimpresiones con premios pagados; no implican fraude. El navegador no confirma la salida física del papel. Solo existe historial desde la activación de la auditoría.';
   } else {
    $tickets=(clone $base)->with('lines')->whereBetween('business_date',[$from->toDateString(),$to->toDateString()])->latest('id')->get();
@@ -137,15 +139,15 @@ class ReportController extends Controller
   $rows=$rows->values(); $page=(int)$r->input('page',1);
   $result=['available'=>$menu->map(fn($label,$key)=>['key'=>$key,'label'=>$label])->values(),'report'=>$kind,'banks'=>$banks->map(fn($bank)=>[...$bank->only(['id','code','name']),'reconciliation_mode'=>app(Configuration::class)->reconciliationMode($bank)]),
    'office'=>['id'=>$active->office_id,'name'=>$active->office->name],'currency'=>$active->office->currency,'draws'=>$draws->values()->map->only(['id','name','lottery_id','lottery']),
-   'from'=>$from->toDateString(),'to'=>$to->toDateString(),'columns'=>$columns,'totals'=>$totals,'note'=>$note,
+   'from'=>$from->toDateString(),'to'=>$to->toDateString(),'columns'=>$columns,'totals'=>$totals,'note'=>$note,'date_time'=>$dateTime,
    'rows'=>new LengthAwarePaginator($rows->forPage($page,25)->values(),$rows->count(),25,$page,['path'=>$r->url(),'query'=>$r->query()])];
   if ($r->filled('format')) {
    $result['rows']=$rows;
    $result['title']=$available[$kind];
    $result['print']=$r->format==='print';
-   $result['generated']=CarbonImmutable::now('America/Santo_Domingo')->format('d/m/Y H:i');
+   $result['generated']=$formatDate(now());
    $result['filterLabels']=['Banca'=>$r->filled('branch_id')?($bankNames[(int)$r->branch_id]??''):($kind==='reconciliation'?'Todas las autorizadas con cuadre por reporte':'Todas las autorizadas')];
-   if($kind==='cash'&&$r->filled('cash_session_id')) $result['filterLabels']['Turno']=$session->created_at->copy()->setTimezone('America/Santo_Domingo')->format('d/m/Y H:i').' — '.($session->closed_at?$session->closed_at->copy()->setTimezone('America/Santo_Domingo')->format('d/m/Y H:i'):'Abierto');
+   if($kind==='cash'&&$r->filled('cash_session_id')) $result['filterLabels']['Turno']=$formatDate($session->created_at).' — '.($session->closed_at?$formatDate($session->closed_at):'Abierto');
    foreach (['lottery_id'=>'Lotería','draw_id'=>'Sorteo','mode'=>'Modalidad','state'=>'Estado','payment'=>'Pago','operation'=>'Operación','view'=>'Vista','search'=>'Búsqueda','risk'=>'Solo reimpresos con premios pagados'] as $key=>$label) {
     if (!$r->filled($key)) continue;
     $value=$r->input($key);

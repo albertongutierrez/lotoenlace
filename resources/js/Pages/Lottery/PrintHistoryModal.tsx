@@ -1,3 +1,4 @@
+import { formatDateTime } from '@/lib/dateTime';
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { Dialog } from "@headlessui/react";
@@ -18,7 +19,7 @@ export default function PrintHistoryModal({ ticket, onClose }: { ticket: any; on
         {query.isError && <p role="alert" className="text-red-500">No se pudo cargar el historial. <button onClick={() => query.refetch()}>Reintentar</button></p>}
         <div className="max-h-[55vh] overflow-auto"><DataTable loading={query.isLoading} data={query.data ?? []} getRowId={(r: any) => String(r.id)} emptyMessage="Sin solicitudes registradas." columns={[
             { accessorKey: "office_number", header: "Control" },
-            { id: "date", header: "Fecha / hora RD", cell: ({ row }: any) => new Date(row.original.created_at).toLocaleString("es-DO", { timeZone: "America/Santo_Domingo" }) },
+            { id: "date", header: "Fecha / hora", cell: ({ row }: any) => formatDateTime(row.original.created_at) },
             { accessorKey: "user", header: "Usuario" },
             { accessorKey: "branch_code", header: "Banca" },
             { id: 'document', header: 'Documento', cell: ({ row }: any) => row.original.document_type === 'payout' ? 'Comprobante de pago' : row.original.document_type === 'continuation' ? 'Ticket de continuación' : 'Ticket de venta' },

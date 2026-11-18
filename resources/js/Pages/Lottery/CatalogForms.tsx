@@ -1,3 +1,4 @@
+import { formatDateTime, displayTimezoneLabel } from '@/lib/dateTime';
 import ComboboxSelect from "@/Components/ComboboxSelect";
 import { useState } from "react";
 import { Dialog } from "@headlessui/react";
@@ -60,7 +61,7 @@ export function DrawEditor({ lottery, draw, timezones = [], onClose }: { lottery
     });
     const [exceptionDate, setExceptionDate] = useState("");
     const effectiveZone = form.timezone ?? lottery.timezone ?? systemTimezone;
-    const rdTime = (value: string) => value ? new Date(drawTime(drawLocalDate(new Date(), effectiveZone), value, effectiveZone)).toLocaleString('es-DO', { timeZone: systemTimezone, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+    const rdTime = (value: string) => value ? formatDateTime(drawTime(drawLocalDate(new Date(), effectiveZone), value, effectiveZone),{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
     const save = useCatalogSave("/lottery/catalog/draws", onClose);
     return <Modal show onClose={onClose} closeable={!save.isPending}>
         <form className="flex max-h-[85dvh] flex-col" onSubmit={e => { e.preventDefault(); save.mutate(form); }}>
@@ -85,7 +86,7 @@ export function DrawEditor({ lottery, draw, timezones = [], onClose }: { lottery
                         </div>
                         <Field label="Zona horaria del sorteo"><TimezoneSelect label="Zona horaria del sorteo" value={form.timezone} inheritZone={lottery.timezone ?? systemTimezone} timezones={timezones} onChange={zone => setForm({ ...form, timezone: zone || null })} /></Field>
                         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span>{form.timezone === null ? 'Heredada de la lotería' : 'Zona propia'} · {effectiveZone}</span>{form.timezone !== null && <button type="button" className="font-medium text-emerald-700 hover:underline dark:text-emerald-400" onClick={() => setForm({ ...form, timezone: null })}>Heredar de la lotería</button>}</div>
-                        <p className="text-xs text-slate-500">Introduce las horas y días de la zona seleccionada. En ventas se usan los cierres equivalentes en RD. Si no hay abreviatura, se muestra el nombre completo.</p>
+                        <p className="text-xs text-slate-500">Introduce las horas y días de la zona seleccionada. En ventas se muestran los cierres equivalentes en la zona de visualización. Si no hay abreviatura, se muestra el nombre completo.</p>
                         <div className="grid gap-4 sm:grid-cols-3">
                             {[
                                 ["opens_at", "Abre ventas"],
@@ -108,7 +109,7 @@ export function DrawEditor({ lottery, draw, timezones = [], onClose }: { lottery
                                 </Field>
                             ))}
                         </div>
-                        <p className="rounded-md bg-slate-100 p-2 text-xs dark:bg-slate-800">Equivalencia en RD para hoy: abre {rdTime(form.opens_at)} · cierra {rdTime(form.closes_at)} · sorteo {rdTime(form.draws_at)}. Se recalcula según la fecha.</p>
+                        <p className="rounded-md bg-slate-100 p-2 text-xs dark:bg-slate-800">Equivalencia en {displayTimezoneLabel()} para hoy: abre {rdTime(form.opens_at)} · cierra {rdTime(form.closes_at)} · sorteo {rdTime(form.draws_at)}. Se recalcula según la fecha.</p>
                         <div className="flex flex-wrap gap-4">
                             {[
                                 "Dom",

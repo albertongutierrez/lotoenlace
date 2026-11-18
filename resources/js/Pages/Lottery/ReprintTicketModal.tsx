@@ -1,3 +1,4 @@
+import { formatTime } from '@/lib/dateTime';
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import axios from "axios";
@@ -30,7 +31,7 @@ export default function ReprintTicketModal({ branch, draws, currency, onClose }:
     const rows = (list.data?.tickets ?? []).filter((r: any) => `${r.reference ?? ""} ${r.code}`.toLowerCase().includes(search.toLowerCase()));
     const columns: DataColumn<any>[] = [
         { accessorKey: "code", header: "Ticket", cell: ({ row }) => <span className="break-all font-mono text-xs">{row.original.reference ?? row.original.code}</span> },
-        { accessorKey: "created_at", header: "Hora RD", cell: ({ row }) => new Date(row.original.created_at).toLocaleString("es-DO", { timeZone: "America/Santo_Domingo", hour: "2-digit", minute: "2-digit" }) },
+        { accessorKey: "created_at", header: "Hora", cell: ({ row }) => formatTime(row.original.created_at) },
         { accessorKey: "net_minor", header: "Total", cell: ({ row }) => money(row.original.net_minor, row.original.currency) },
         { id: "remaining", header: "Tiempo restante", cell: ({ row }) => { if (row.original.status !== "sold") return <span className="text-red-500">Anulado</span>; const seconds = remaining(row.original); if (!seconds) return <span className="text-slate-500">Plazo vencido</span>; return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`; } },
         { id: "actions", header: "Acciones", cell: ({ row }) => <button className={secondary + " disabled:cursor-not-allowed disabled:opacity-40"} disabled={query.isPending || (row.original.status !== "sold" || remaining(row.original) <= 0)} title={row.original.status !== "sold" ? "Ticket anulado" : remaining(row.original) <= 0 ? "Plazo de reimpresión vencido" : "Reimprimir ticket"} onClick={() => query.mutate(row.original.code)} aria-label={`Reimprimir ticket ${row.original.reference ?? row.original.code}`}><Printer className="mr-2 inline h-4 w-4" />Reimprimir</button> },

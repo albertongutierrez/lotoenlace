@@ -1,3 +1,4 @@
+import { formatTime } from '@/lib/dateTime';
 import { useState } from 'react';
 import { Dialog } from '@headlessui/react';
 import { useQuery } from '@tanstack/react-query';
@@ -9,7 +10,7 @@ import logos from '@/lib/resultLogos.json';
 import { input, secondary } from './shared';
 
 type Published = { id: number; name: string; source_key: string | null; numbers: string[]; published_at: string };
-const time = (value: string) => new Date(value).toLocaleTimeString('es-DO', { timeZone: 'America/Santo_Domingo', hour: '2-digit', minute: '2-digit' });
+const time = (value: string) => formatTime(value);
 export default function PublishedResultsModal({ branchId, userId, onClose }: { branchId: number; userId: number; onClose: () => void }) {
     const [search, setSearch] = useState('');
     const results = useQuery({ queryKey: ['lottery', 'published-results', userId, branchId], retry: false, staleTime: 0,

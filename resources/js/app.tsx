@@ -9,6 +9,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient, queryScope } from './lib/queryClient';
 
 import { installContextualNavigation } from './lib/contextualNavigation';
+import { setDateTimeFromPage } from './lib/dateTime';
 
 const pages = import.meta.glob<{ default: import('react').ComponentType }>('./Pages/**/*.tsx');
 
@@ -47,9 +48,11 @@ createInertiaApp({
     setup({ el, App, props }) {
 
         installContextualNavigation(props.initialPage);
+        setDateTimeFromPage(props.initialPage);
 
         let scope = queryScope(props.initialPage);
         router.on('navigate', ({ detail }) => {
+            setDateTimeFromPage(detail.page);
             const nextScope = queryScope(detail.page);
             if (nextScope !== scope) {
                 queryClient.clear();

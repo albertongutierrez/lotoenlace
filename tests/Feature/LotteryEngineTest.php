@@ -106,6 +106,60 @@ class LotteryEngineTest extends TestCase
         $this->assertNull($config->window($this->a, $at));
     }
 
+    public function test_display_timezone_and_hour_format_inherit_without_changing_operational_dates_or_closures(): void
+    {
+        $directory=storage_path('framework/testing/display-time-'.Str::uuid());
+        config(['printing.private_key_path'=>$directory.'/private.pem']);
+        $this->artisan('lottery:print-agent-key')->assertExitCode(0);
+        try {
+            $this->travelTo(CarbonImmutable::parse('2026-01-15 23:30:00','America/Santo_Domingo'));
+            $this->a->update(['opens_at'=>'00:00:00','closes_at'=>'23:59:00','draws_at'=>'23:59:00']);
+            $window=app(Configuration::class)->window($this->a);
+            $settings=[...$this->office->lottery_settings,'display_timezone'=>'Europe/Madrid','time_format'=>'24'];
+            $this->actingAs($this->seller)->postJson('/lottery/settings',['scope'=>'office','currency'=>'DOP','settings'=>$settings])->assertRedirect();
+            $this->assertSame('Europe/Madrid',app(Configuration::class)->effective($this->branch->fresh())['display_timezone']);
+            $this->assertSame('2026-01-15',app(Configuration::class)->clock()->toDateString());
+            $this->assertEquals($window,app(Configuration::class)->window($this->a));
+            $ticket=$this->sell()->refresh();$ticket->update(['payment_pin'=>'000042']);
+            $stored=$ticket->getRawOriginal('created_at');
+            $this->assertSame('2026-01-15',$ticket->business_date);
+            $this->assertSame('2026-01-15',$ticket->lines()->first()->draw_date);
+            $this->assertNull(app(\App\Services\Lottery\PrintPolicy::class)->denial($ticket));
+            $request=['attempt_key'=>(string)Str::uuid(),'trigger'=>'automatic','transport'=>'local','device_id'=>(string)Str::uuid(),'printer'=>'Térmica','profile'=>'epson','paper_width'=>58,'cut'=>true];
+            $printed=$this->postJson('/lottery/tickets/'.$ticket->code.'/print',$request)->assertOk();
+            $receipt=json_decode(base64_decode($printed->json('authorization.payload')),true)['receipt'];
+            $this->assertSame('16/01/2026 04:30:00',$receipt['date']);
+            $this->getJson('/lottery/reports?report=tickets&period=today')->assertOk()->assertJsonPath('from','2026-01-15')->assertJsonPath('to','2026-01-15')->assertJsonPath('rows.total',1)->assertJsonPath('date_time.display_timezone','Europe/Madrid');
+            $this->get('/lottery/reports?report=tickets&period=today&format=print')->assertOk()->assertSee('16/01/2026 04:30')->assertSee('Europe/Madrid')->assertSee('Período operativo: RD');
+            $this->get('/dashboard')->assertOk()->assertInertia(fn($page)=>$page->where('auth.activeBranchOffice.display_timezone','Europe/Madrid')->where('auth.activeBranchOffice.time_format','24')->where('overview.from','2026-01-15'));
+            $this->postJson('/lottery/settings',['scope'=>'branch','branch_id'=>$this->branch->id,'currency'=>'DOP','settings'=>['display_timezone'=>'America/Santo_Domingo','time_format'=>'12']])->assertRedirect();
+            $printed=$this->postJson('/lottery/tickets/'.$ticket->code.'/print',[...$request,'attempt_key'=>(string)Str::uuid()])->assertOk();
+            $receipt=json_decode(base64_decode($printed->json('authorization.payload')),true)['receipt'];
+            $this->assertSame('15/01/2026 11:30:00 PM',$receipt['date']);
+            $this->postJson('/lottery/settings',['scope'=>'branch','branch_id'=>$this->branch->id,'currency'=>'DOP','settings'=>['display_timezone'=>null,'time_format'=>null]])->assertRedirect();
+            $this->assertSame(['display_timezone'=>'Europe/Madrid','time_format'=>'24'],app(\App\Services\Lottery\DateTimePreferences::class)->forBranch($this->branch->fresh()));
+            $this->assertArrayNotHasKey('display_timezone',$this->branch->fresh()->lottery_settings);
+            $this->assertSame($stored,$ticket->fresh()->getRawOriginal('created_at'));
+            $this->assertSame('2026-01-15',$ticket->fresh()->business_date);
+            $ticket->lines()->update(['prize_minor'=>7500]);
+            $this->postJson('/lottery/sales/tickets/'.$ticket->code.'/pay',['pin'=>'000042'])->assertOk()->assertJsonPath('payment_receipt.date','16/01/2026 04:30:00');
+        } finally { \Illuminate\Support\Facades\File::deleteDirectory($directory); }
+    }
+
+    public function test_display_preferences_validate_iana_zones_and_formats_and_respect_spain_daylight_saving(): void
+    {
+        $this->actingAs($this->seller);
+        $this->postJson('/lottery/settings',['scope'=>'office','currency'=>'DOP','settings'=>['display_timezone'=>'UTC+1']])->assertUnprocessable()->assertJsonValidationErrors('settings.display_timezone');
+        $this->postJson('/lottery/settings',['scope'=>'branch','branch_id'=>$this->branch->id,'currency'=>'DOP','settings'=>['time_format'=>'25']])->assertUnprocessable()->assertJsonValidationErrors('settings.time_format');
+        $display=app(\App\Services\Lottery\DateTimePreferences::class);
+        $preferences=['display_timezone'=>'Europe/Madrid','time_format'=>'24'];
+        $winter=CarbonImmutable::parse('2026-01-15T16:30:00Z');
+        $this->assertSame('15/01/2026 17:30',$display->format($winter,$preferences));
+        $this->assertSame('15/07/2026 18:30',$display->format('2026-07-15T16:30:00Z',$preferences));
+        $this->assertSame('16:30',$winter->format('H:i'));
+        $this->assertSame(0,$winter->getOffset());
+    }
+
     public function test_lottery_timezone_is_inherited_and_draw_overrides_can_return_to_inheritance(): void
     {
         $lottery = $this->a->lottery;
@@ -1753,7 +1807,7 @@ class LotteryEngineTest extends TestCase
         try {
             $this->a->update(['abbreviation' => 'ABR A']);
             $this->b->update(['abbreviation' => 'ABR B']);
-            $this->office->update(['lottery_settings' => [...$this->office->lottery_settings, 'abbreviate_draw_names' => true, 'show_pin_on_reprint' => false]]);
+            $this->office->update(['lottery_settings' => [...$this->office->lottery_settings, 'abbreviate_draw_names' => true, 'show_pin_on_reprint' => false, 'display_timezone' => 'Europe/Madrid', 'time_format' => '24']]);
             $ticket = $this->sell([$this->line('10'), [...$this->line('5'), 'numbers' => '11'], [...$this->line('4'), 'draw_id' => $this->b->id, 'numbers' => '20'], $this->line('3', true)]);
             $ticket->update(['payment_pin' => '000042', 'created_at' => now()->subDays(2), 'business_date' => now()->subDays(2)->toDateString()]);
             $lines = $ticket->lines()->orderBy('id')->get();
@@ -1782,6 +1836,7 @@ class LotteryEngineTest extends TestCase
             $this->assertSame(2, json_decode(base64_decode($printed->json('authorization.payload')), true)['target']['wagers_per_row']);
             $receipt = json_decode(base64_decode($printed->json('authorization.payload')), true)['receipt'];
             $this->assertSame($firstPin, $receipt['pin']); $this->assertSame('continuation', $receipt['document_type']);
+            $this->assertSame('20/10/2026 16:00:00',$receipt['date']);
             $this->assertSame(['20', '10-20'], array_column($receipt['lines'], 'numbers'));
             $this->assertSame(['quiniela', 'super_pale'], array_column($receipt['lines'], 'modality'));
             $this->assertSame(['B', 'A + B'], array_column($receipt['lines'], 'draw'));

@@ -17,6 +17,8 @@ export interface User {
 }
 
 export interface BranchOfficeSummary {
+    display_timezone?: string;
+    time_format?: '12' | '24';
     reconciliation_mode?: 'cash' | 'report';
 
     id?: number;

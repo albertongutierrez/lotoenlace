@@ -43,7 +43,7 @@ class PrintAuthorization
                 'test_reprint' => (bool) ($p['test_reprint'] ?? false), 'status' => $ticket->status,
                 'branch' => $bank->code, 'currency' => $ticket->currency,
                 'company_name' => $bank->office->name, 'branch_name' => $bank->name ?: $bank->code,
-                'date' => $ticket->created_at->copy()->timezone('America/Santo_Domingo')->format('d/m/Y h:i:s A'),
+                'date' => app(DateTimePreferences::class)->format($ticket->created_at, app(DateTimePreferences::class)->forBranch($bank), true),
                 'lines' => $ticket->lines->map(fn ($line) => [
                     'draw_id' => $line->draw_id, 'second_draw_id' => $line->second_draw_id,
                     'draw' => $line->draw->name.($line->secondDraw ? ' + '.$line->secondDraw->name : ''),

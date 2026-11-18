@@ -206,7 +206,7 @@ class LotteryController extends Controller
 
             'effective' => $branch ? $config->effective($branch) : array_replace(Configuration::DEFAULTS, $office->lottery_settings ?? []),
 
-            'defaults' => Configuration::DEFAULTS, 'draws' => Draw::with('lottery')->get()]);
+            'defaults' => Configuration::DEFAULTS, 'timezones' => \DateTimeZone::listIdentifiers(), 'draws' => Draw::with('lottery')->get()]);
 
     }
 
@@ -231,7 +231,7 @@ class LotteryController extends Controller
 
         $data = $r->validate(['scope' => ['required', Rule::in(['office', 'branch'])], 'currency' => ['required', Rule::in(['DOP', 'USD', 'EUR', 'HTG'])],
 
-            'settings' => 'present|array:payment_methods,payment_method_labels,payment_reference_required,reconciliation_mode,daily_limit_minor,consortium_limit_minor,cancel_minutes,reprint_minutes,show_qr,show_pin_on_reprint,abbreviate_draw_names,copy_consortium_tickets,ticket_copy_mode,discount_enabled,discount_every_minor,discount_amount_minor,footer,draw_ids,general_rules,rules,pairs,super_pale',
+            'settings' => 'present|array:payment_methods,payment_method_labels,payment_reference_required,reconciliation_mode,daily_limit_minor,consortium_limit_minor,cancel_minutes,reprint_minutes,show_qr,show_pin_on_reprint,abbreviate_draw_names,copy_consortium_tickets,ticket_copy_mode,discount_enabled,discount_every_minor,discount_amount_minor,display_timezone,time_format,footer,draw_ids,general_rules,rules,pairs,super_pale',
 
             'settings.payment_methods' => 'nullable|array|list|min:1|max:100',
             'settings.payment_methods.*' => ['required', 'string', 'regex:/^(cash|transfer|card|deposit|custom_[a-f0-9]{12})$/D', 'distinct'],
@@ -250,6 +250,8 @@ class LotteryController extends Controller
             'settings.copy_consortium_tickets' => 'nullable|boolean',
             'settings.ticket_copy_mode' => 'nullable|in:original,selected',
             'settings.abbreviate_draw_names' => 'nullable|boolean',
+            'settings.display_timezone' => ['nullable', Rule::in(\DateTimeZone::listIdentifiers())],
+            'settings.time_format' => 'nullable|string|in:12,24',
 
             'settings.discount_every_minor' => 'nullable|integer|min:1|max:999999999', 'settings.discount_amount_minor' => 'nullable|integer|min:0|max:999999999',
 
@@ -598,7 +600,7 @@ class LotteryController extends Controller
 
 
         $ticket = $sales->sell($r->user(), $b, $data);
-        $ticket->setAttribute('print_settings', ['show_qr' => (bool) app(Configuration::class)->effective($b)['show_qr'], 'company_name' => $b->office->name, 'branch_name' => $b->name ?: $b->code]);
+        $ticket->setAttribute('print_settings', ['show_qr' => (bool) app(Configuration::class)->effective($b)['show_qr'], 'company_name' => $b->office->name, 'branch_name' => $b->name ?: $b->code, 'date_time' => app(\App\Services\Lottery\DateTimePreferences::class)->forBranch($b)]);
         return response()->json($ticket);
 
     }
@@ -718,7 +720,7 @@ class LotteryController extends Controller
             $reason = app(\App\Services\Lottery\PrintPolicy::class)->denial($ticket);
             abort_if($reason !== null, 422, $reason ?? '');
         }
-        $ticket->setAttribute('print_settings', ['show_qr' => (bool) app(Configuration::class)->effective($b)['show_qr'], 'company_name' => $b->office->name, 'branch_name' => $b->name ?: $b->code, 'test_reprint' => app(\App\Services\Lottery\PrintPolicy::class)->isTestOffice($b->office_id)]);
+        $ticket->setAttribute('print_settings', ['show_qr' => (bool) app(Configuration::class)->effective($b)['show_qr'], 'company_name' => $b->office->name, 'branch_name' => $b->name ?: $b->code, 'test_reprint' => app(\App\Services\Lottery\PrintPolicy::class)->isTestOffice($b->office_id), 'date_time' => app(\App\Services\Lottery\DateTimePreferences::class)->forBranch($b)]);
         $ticket->setAttribute('cancellation', app(\App\Services\Lottery\CancellationPolicy::class)->state($ticket));
         return $ticket;
 

@@ -43,11 +43,13 @@ class ContinuationTicket
         $snapshot = $payment->payload['continuation'] ?? null;
         abort_unless($ticket->status === 'sold' && is_array($snapshot) && !empty($snapshot['lines']), 422, 'No hay jugadas pendientes en este pago.');
         $snapshot = app(ReceiptDrawNames::class)->fullNames($snapshot);
+        $display = app(DateTimePreferences::class)->forBranch(BranchOffice::with('office')->findOrFail($ticket->branch_office_id));
         return [...$snapshot, 'document_type' => 'continuation', 'payment_id' => $payment->id, 'status' => $ticket->status,
+            'print_settings' => [...($snapshot['print_settings'] ?? []), 'date_time' => $display],
             'reference' => $ticket->reference, 'code' => $ticket->code,
             'payment_reference' => 'P-'.str_pad((string) $payment->office_number, 6, '0', STR_PAD_LEFT),
             'paid_minor' => $payment->payload['amount_minor'], 'paid_by' => $payment->payload['receipt']['paid_by'] ?? '',
             'created_at' => $payment->created_at->toIso8601String(),
-            'date' => $payment->created_at->copy()->timezone('America/Santo_Domingo')->format('d/m/Y h:i:s A')];
+            'date' => app(DateTimePreferences::class)->format($payment->created_at, $display, true)];
     }
 }

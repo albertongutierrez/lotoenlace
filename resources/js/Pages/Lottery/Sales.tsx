@@ -1,3 +1,4 @@
+import { formatTime, getDateTimePreferences, displayTimezoneLabel } from '@/lib/dateTime';
 import ComboboxSelect from "@/Components/ComboboxSelect";
 import MoneyInput from "@/Components/MoneyInput";
 import { paymentMethodName } from "@/lib/paymentMethods";
@@ -995,7 +996,7 @@ function SalesWorkspace({
                             return (
                                 <button
                                     disabled={busy}
-                                    title={`${fullDrawName(d)} · ${d.timezone ?? 'America/Santo_Domingo'} · Sorteo ${new Date(getWindow(d).result).toLocaleTimeString('es-DO', {timeZone: 'America/Santo_Domingo', hour: '2-digit', minute: '2-digit'})} RD · Cierra en ${Math.floor(seconds / 3600).toString().padStart(2, "0")}:${Math.floor(seconds / 60 % 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`}
+                                    title={`${fullDrawName(d)} · ${d.timezone ?? 'America/Santo_Domingo'} · Sorteo ${formatTime(getWindow(d).result)} ${displayTimezoneLabel()} · Cierra en ${Math.floor(seconds / 3600).toString().padStart(2, "0")}:${Math.floor(seconds / 60 % 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`}
                                     key={d.id}
                                     aria-pressed={panelSelected.includes(d.id)}
                                     className={`relative min-w-0 rounded-md border px-2 py-1.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 ${panelSelected.includes(d.id) ? "border-emerald-600 bg-emerald-50 text-emerald-950 ring-1 ring-emerald-600 dark:border-emerald-400 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-400" : "border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"}`}
@@ -1007,7 +1008,7 @@ function SalesWorkspace({
                                         </span>
                                         <span className="min-w-0 break-words text-xs font-semibold leading-4">{nameForDraw(d.id)}</span>
                                     </span>
-                                    {d.timezone && d.timezone !== 'America/Santo_Domingo' && <span className="block pl-6 text-[10px] text-emerald-700 dark:text-emerald-400">Sorteo {new Date(getWindow(d).result).toLocaleTimeString('es-DO', {timeZone: 'America/Santo_Domingo', hour:'2-digit', minute:'2-digit'})} RD</span>}
+                                    {d.timezone && d.timezone !== getDateTimePreferences().display_timezone && <span className="block pl-6 text-[10px] text-emerald-700 dark:text-emerald-400">Sorteo {formatTime(getWindow(d).result)} {displayTimezoneLabel()}</span>}
                                     <span className={`mt-1 block pl-6 text-xs tabular-nums ${seconds < 300 ? "font-semibold text-red-600 dark:text-red-400" : "text-slate-600 dark:text-slate-400"}`}>
                                         Cierra en{" "}
                                         {Math.floor(seconds / 3600)

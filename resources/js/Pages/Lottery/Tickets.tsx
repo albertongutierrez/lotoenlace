@@ -1,3 +1,4 @@
+import { formatTime } from '@/lib/dateTime';
 import { canCancelTicket, useCancellationClock } from '@/lib/ticketCancellation';
 import ComboboxSelect from "@/Components/ComboboxSelect";
 import PrintHistoryModal from "./PrintHistoryModal";
@@ -186,7 +187,7 @@ export default function Tickets({ tickets: initialTickets, currency: initialCurr
 
             </form>
 
-            <p className="text-xs text-slate-500">Actualización automática cada 5 segundos · {listing.dataUpdatedAt ? new Date(listing.dataUpdatedAt).toLocaleTimeString("es-DO", { timeZone: "America/Santo_Domingo" }) : "Sincronizando"}</p>
+            <p className="text-xs text-slate-500">Actualización automática cada 5 segundos · {listing.dataUpdatedAt ? formatTime(listing.dataUpdatedAt,{second:"2-digit"}) : "Sincronizando"}</p>
 
             <div className={view === "grid" ? "grid grid-cols-1 items-start gap-3 md:grid-cols-2 xl:grid-cols-3" : "space-y-3"}>
 
@@ -215,7 +216,7 @@ export default function Tickets({ tickets: initialTickets, currency: initialCurr
 
                             <div><p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Código del ticket</p><p className="break-all font-mono text-xs font-semibold">{t.reference ?? t.code}</p></div>
 
-                            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span><CalendarDays className="mr-1 inline h-3.5 w-3.5" />{t.business_date} · {new Date(t.created_at).toLocaleTimeString("es-DO", { timeZone: "America/Santo_Domingo", hour: "2-digit", minute: "2-digit" })}</span><span>{t.lines.length} {t.lines.length === 1 ? "jugada" : "jugadas"}</span></div>
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span><CalendarDays className="mr-1 inline h-3.5 w-3.5" />{t.business_date} · {formatTime(t.created_at)}</span><span>{t.lines.length} {t.lines.length === 1 ? "jugada" : "jugadas"}</span></div>
 
                             <div className="flex items-end justify-between gap-3 border-t border-slate-200 pt-3 dark:border-slate-800"><div><p className="text-xs text-slate-500">Total cobrado</p><p className="text-xl font-bold">{money(t.net_minor, t.currency)}</p></div><div className="text-right"><p className="text-xs text-slate-500">Descuento</p><p className="text-sm">{money(t.discount_minor, t.currency)}</p></div></div>
 

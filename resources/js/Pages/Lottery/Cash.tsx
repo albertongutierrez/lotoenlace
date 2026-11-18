@@ -1,3 +1,4 @@
+import { formatDateTime } from '@/lib/dateTime';
 import ComboboxSelect from "@/Components/ComboboxSelect";
 import ReportPdfModal from "@/Components/ReportPdfModal";
 import LoadingSkeleton from "@/Components/LoadingSkeleton";
@@ -13,7 +14,7 @@ import { DataTable } from "@/Components/ui/data-table";
 import { RowActions } from "@/Components/ui/row-actions";
 import { requestId } from "@/lib/requestId";
 import { Shell, panel, input, button, secondary, money } from "./shared";
-const date = (value: string) => value ? new Date(value).toLocaleString("es-DO", { timeZone: "America/Santo_Domingo" }) : "—";
+const date = (value: string) => value ? formatDateTime(value) : "—";
 const types: Record<string, string> = { opening: "Fondo inicial", sale: "Venta neta", refund: "Devolución por anulación", prize: "Pago de premios", deposit: "Entrada manual", withdrawal: "Salida manual" };
 export default function Cash(props: any) {
  const client=useQueryClient();
@@ -53,8 +54,8 @@ export default function Cash(props: any) {
   </form>
   {listing.isError&&<p role="alert" className="text-red-500">No se pudo actualizar la caja. <button onClick={()=>listing.refetch()}>Reintentar</button></p>}
   <div className={panel+" !p-0 overflow-hidden"}><DataTable loading={listing.isLoading} data={data.sessions.data} serverPage={data.sessions} onPageChange={url=>setPage(Number(new URL(url).searchParams.get("page")??1))} getRowId={(r:any)=>String(r.id)} columns={[
-   {id:"opened",header:"Apertura RD",cell:({row}:any)=><button type="button" className="font-medium text-emerald-700 hover:underline disabled:text-slate-500 disabled:no-underline dark:text-emerald-400" disabled={row.original.status==="open"&&!data.can_view_open} onClick={()=>viewDetail(row.original.id)}>{date(row.original.created_at)}</button>},
-   {id:"closed",header:"Cierre RD",cell:({row}:any)=>date(row.original.closed_at)},
+   {id:"opened",header:"Apertura",cell:({row}:any)=><button type="button" className="font-medium text-emerald-700 hover:underline disabled:text-slate-500 disabled:no-underline dark:text-emerald-400" disabled={row.original.status==="open"&&!data.can_view_open} onClick={()=>viewDetail(row.original.id)}>{date(row.original.created_at)}</button>},
+   {id:"closed",header:"Cierre",cell:({row}:any)=>date(row.original.closed_at)},
    {id:"owner",header:"Responsable",cell:({row}:any)=>row.original.opener?.name},
    {id:"status",header:"Estado",cell:({row}:any)=><span className={row.original.status==="open"?"text-emerald-500":"text-slate-500"}>{row.original.status==="open"?"Abierta":"Cerrada"}</span>},
    {id:"expected",header:"Esperado",cell:({row}:any)=>row.original.balance_minor == null ? "Oculto hasta el cierre" : money(row.original.balance_minor,row.original.currency)},
@@ -85,7 +86,7 @@ export default function Cash(props: any) {
    </section>}
    <div className="flex shrink-0 items-center justify-between gap-3 border-y border-slate-200 px-4 py-2 dark:border-slate-700"><h3 className="text-sm font-semibold">Movimientos del cuadre</h3><ComboboxSelect aria-label="Tipo de movimiento" className={input+" !w-48 !py-1 !text-xs"} value={movementType} onChange={e=>{setMovementType(e.target.value);setMovementPage(1);}}><option value="all">Todos los movimientos</option>{Object.entries(types).map(([key,label])=><option key={key} value={key}>{label}</option>)}</ComboboxSelect></div>
    <div className="min-h-0 flex-1"><DataTable fillHeight loading={details.isLoading} data={details.data?.movements.data??[]} serverPage={details.data?.movements} onPageChange={url=>setMovementPage(Number(new URL(url).searchParams.get("page")??1))} columns={[
-    {id:"date",header:"Fecha RD",cell:({row}:any)=>date(row.original.created_at)}, {id:"type",header:"Tipo",cell:({row}:any)=>types[row.original.type]},
+    {id:"date",header:"Fecha",cell:({row}:any)=>date(row.original.created_at)}, {id:"type",header:"Tipo",cell:({row}:any)=>types[row.original.type]},
     {id:"reference",header:"Ticket / motivo",cell:({row}:any)=><span className="break-all text-xs">{row.original.ticket?.reference??row.original.ticket?.code??row.original.note}</span>},
     {id:"user",header:"Usuario",cell:({row}:any)=>row.original.user?.name},
     {id:"payment_method",header:"Medio",cell:({row}:any)=>row.original.payment_method_label ?? paymentMethodName(row.original.payment_method)},

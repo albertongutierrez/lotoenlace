@@ -30,6 +30,14 @@ test('la forma de copiar tickets muestra los destinos propios y permite volver a
     expect(JSON.parse(screen.getByTestId('settings').textContent!)).toEqual({});
 });
 
+test('muestra la zona visual y el formato propio y permite quitar esas excepciones',()=>{
+    render(<Editor initial={{display_timezone:'Europe/Madrid',time_format:'24',footer:'Propio'}}/>);
+    expect(screen.getByText('Europe/Madrid')).toBeTruthy();expect(screen.getByText('24 horas')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'Heredar Zona horaria de visualización'}));
+    fireEvent.click(screen.getByRole('button',{name:'Heredar Formato de hora'}));
+    expect(JSON.parse(screen.getByTestId('settings').textContent!)).toEqual({footer:'Propio'});
+});
+
 test('respeta los permisos de medios de cobro y forma de cuadre al heredar', () => {
     render(<Editor initial={{ payment_methods: ['transfer'], reconciliation_mode: 'report', footer: 'Pie propio' }} permissions={['lottery.settings']} />);
     expect((screen.getByRole('button', { name: 'Heredar Medios de cobro y referencias' }) as HTMLButtonElement).disabled).toBe(true);
